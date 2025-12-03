@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/gin-contrib/cors"
 	"github.com/yudongyouqing/GMusic/internal/lyrics"
 	"github.com/yudongyouqing/GMusic/internal/metadata"
 	"github.com/yudongyouqing/GMusic/internal/player"
@@ -30,9 +30,9 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	router := gin.Default()
 	// 启用 CORS 允许前端 http://localhost:5173 访问
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:5173"},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{"Content-Type", "Authorization"},
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
 
