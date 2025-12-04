@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getSongs, searchSongs, play, pause, resume, stop, setVolume, status, getLyrics } from '../api/music'
+import { getSongs, searchSongs, play, pause, resume, stop, setVolume, status, getLyrics, scan } from '../api/music'
 
 export const usePlayerStore = defineStore('player', () => {
   // state
@@ -68,13 +68,20 @@ export const usePlayerStore = defineStore('player', () => {
     playerStatus.value = data
   }
 
+  // 扫描目录导入歌曲
+  async function scanDir(dirPath, workers = 4) {
+    await scan(dirPath, workers)
+    // 简单轮询刷新列表（2s、5s）
+    setTimeout(fetchSongs, 2000)
+    setTimeout(fetchSongs, 5000)
+  }
+
   return {
     // state
     songs, searchResults, currentSong, isPlaying, lyrics, playerStatus,
     // getters
     songList,
     // actions
-    fetchSongs, doSearch, playSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus,
+    fetchSongs, doSearch, playSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus, scanDir,
   }
 })
-

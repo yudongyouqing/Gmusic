@@ -6,13 +6,16 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/hajimehoshi/oto"
+	"github.com/mewkiz/flac"
 )
 
-// Player 基于 oto v1 的简单播放器（当前实现 MP3）
+// Player 基于 oto v1 的播放器，支持 MP3 与 FLAC（16-bit PCM 输出）
 type Player struct {
 	mu              sync.Mutex
 	currentFile     *os.File
@@ -23,35 +26,27 @@ type Player struct {
 	isPlaying       bool
 	isPaused        bool
 	currentPosition float64 // 秒（由已写入字节推算）
-	duration        float64 // 秒（估算）
+	duration        float64 // 秒（估算/计算）
 	volume          float32 // 0.0 - 1.0
 	currentFilePath string
 	bytesPerSec     float64
-	bytesWritten    int64
 }
 
-// NewPlayer 创建播放器上下文
+// NewPlayer 创建播放器（延迟创建音频上下文，按每首歌参数创建）
 func NewPlayer() (*Player, error) {
-	// 44100Hz, 2 声道, 16-bit, 缓冲区 8192 字节
-	ctx, err := oto.NewContext(44100, 2, 2, 8192)
-	if err != nil {
-		return nil, fmt.Errorf("创建音频上下文失败: %w", err)
-	}
-	return &Player{
-		context: ctx,
-		volume:  1.0,
-	}, nil
+	return &Player{volume: 1.0}, nil
 }
 
-// Play 播放文件（目前仅 MP3）
+// Play 播放文件（支持 .mp3 / .flac）
 func (p *Player) Play(filePath string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	// 停止并清理旧的
-	if p.playerInited {
+	if p.playerInited && p.player != nil {
 		_ = p.player.Close()
 		p.playerInited = false
+		p.player = nil
 	}
 	if p.currentFile != nil {
 		_ = p.currentFile.Close()
@@ -65,34 +60,73 @@ func (p *Player) Play(filePath string) error {
 	p.currentFile = f
 	p.currentFilePath = filePath
 
-	// 仅实现 MP3 解码
-	dec, err := mp3.NewDecoder(f)
+	dec, dur, sr, ch, err := p.getDecoder(f, filePath)
 	if err != nil {
 		_ = f.Close()
 		p.currentFile = nil
-		return fmt.Errorf("MP3 解码失败: %w", err)
+		return err
 	}
 	p.decoder = dec
+	p.duration = dur
+	p.bytesPerSec = float64(sr*ch) * 2 // 16-bit
 
-	// 估算参数
-	p.bytesPerSec = float64(dec.SampleRate()) * 2 /*channels*/ * 2 /*bytes*/
-	if p.bytesPerSec > 0 {
-		p.duration = float64(dec.Length()) / p.bytesPerSec
-	} else {
-		p.duration = 0
+	// 为该音频创建匹配的上下文
+	ctx, err := oto.NewContext(sr, ch, 2, 8192)
+	if err != nil {
+		return fmt.Errorf("创建音频上下文失败: %w", err)
 	}
-	p.bytesWritten = 0
+	p.context = ctx
+	p.player = p.context.NewPlayer()
+	p.playerInited = true
+
 	p.currentPosition = 0
 	p.isPlaying = true
 	p.isPaused = false
 
-	// 新建底层播放器
-	pl := p.context.NewPlayer()
-	p.player = pl
-	p.playerInited = true
-
 	go p.playLoop()
 	return nil
+}
+
+// getDecoder 根据扩展名选择解码器，返回 PCM io.Reader
+func (p *Player) getDecoder(file *os.File, filePath string) (io.Reader, float64, int, int, error) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".mp3":
+		dec, err := mp3.NewDecoder(file)
+		if err != nil {
+			return nil, 0, 0, 0, fmt.Errorf("MP3 解码失败: %w", err)
+		}
+		sr := dec.SampleRate()
+		ch := 2 // go-mp3 输出为 2 通道 16-bit PCM
+		bytesLen := float64(dec.Length())
+		bps := float64(sr*ch) * 2
+		var dur float64
+		if bps > 0 {
+			dur = bytesLen / bps
+		}
+		return dec, dur, sr, ch, nil
+	case ".flac":
+		// flac 需要将每帧样本转换为 16-bit PCM 并交织
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return nil, 0, 0, 0, err
+		}
+		stream, err := flac.New(file)
+		if err != nil {
+			return nil, 0, 0, 0, fmt.Errorf("FLAC 解析失败: %w", err)
+		}
+		sr := int(stream.Info.SampleRate)
+		ch := int(stream.Info.NChannels)
+		bps := int(stream.Info.BitsPerSample)
+		reader := &flacPCMReader{stream: stream, bitsPerSample: bps}
+		// 时长：样本总数 / 采样率（单位秒）
+		var dur float64
+		if stream.Info.NSamples > 0 && stream.Info.SampleRate > 0 {
+			dur = float64(stream.Info.NSamples) / float64(stream.Info.SampleRate)
+		}
+		return reader, dur, sr, ch, nil
+	default:
+		return nil, 0, 0, 0, fmt.Errorf("不支持的音频格式: %s", ext)
+	}
 }
 
 // 内部播放循环
@@ -109,19 +143,16 @@ func (p *Player) playLoop() {
 		bps := p.bytesPerSec
 		p.mu.Unlock()
 
-		if !playing || !inited || dec == nil {
+		if !playing || !inited || dec == nil || pl == nil {
 			break
 		}
 		if paused {
-			// 简单暂停：停止写数据
-			// 也可 sleep 以降低 CPU
-			// 这里不更新进度
+			// 暂停：不写数据
 			continue
 		}
 
 		n, err := dec.Read(buf)
 		if n > 0 {
-			// 应用音量（16-bit LE）
 			if vol < 1.0 {
 				applyVolume16LE(buf[:n], vol)
 			}
@@ -129,10 +160,7 @@ func (p *Player) playLoop() {
 				break
 			}
 			p.mu.Lock()
-			p.bytesWritten += int64(n)
-			if bps > 0 {
-				p.currentPosition = float64(p.bytesWritten) / bps
-			}
+			p.currentPosition += float64(n) / bps
 			p.mu.Unlock()
 		}
 		if err == io.EOF {
@@ -145,9 +173,10 @@ func (p *Player) playLoop() {
 
 	p.mu.Lock()
 	p.isPlaying = false
-	if p.playerInited {
+	if p.playerInited && p.player != nil {
 		_ = p.player.Close()
 		p.playerInited = false
+		p.player = nil
 	}
 	if p.currentFile != nil {
 		_ = p.currentFile.Close()
@@ -201,9 +230,10 @@ func (p *Player) Stop() {
 	p.isPlaying = false
 	p.isPaused = false
 	p.currentPosition = 0
-	if p.playerInited {
+	if p.playerInited && p.player != nil {
 		_ = p.player.Close()
 		p.playerInited = false
+		p.player = nil
 	}
 	if p.currentFile != nil {
 		_ = p.currentFile.Close()
@@ -249,4 +279,58 @@ func (p *Player) IsPlaying() bool {
 func (p *Player) Close() error {
 	p.Stop()
 	return nil
+}
+
+// flacPCMReader 将 mewkiz/flac 流转换为交织的 16-bit PCM 字节流
+// 注：该实现不做采样率转换，直接以原始采样率输出
+
+type flacPCMReader struct {
+	stream        *flac.Stream
+	bitsPerSample int
+	buf           []byte
+	pos           int
+}
+
+func (r *flacPCMReader) Read(p []byte) (int, error) {
+	for r.pos >= len(r.buf) {
+		// 需要填充下一帧
+		fr, err := r.stream.ParseNext()
+		if err != nil {
+			return 0, err
+		}
+		chs := len(fr.Subframes)
+		if chs == 0 {
+			return 0, io.EOF
+		}
+		block := len(fr.Subframes[0].Samples)
+		if cap(r.buf) < chs*block*2 {
+			r.buf = make([]byte, 0, chs*block*2)
+		} else {
+			r.buf = r.buf[:0]
+		}
+		shift := 0
+		if r.bitsPerSample > 16 {
+			shift = r.bitsPerSample - 16
+		}
+		for i := 0; i < block; i++ {
+			for c := 0; c < chs; c++ {
+				v := int32(fr.Subframes[c].Samples[i])
+				if shift > 0 {
+					v = v >> uint(shift)
+				}
+				if v > math.MaxInt16 {
+					v = math.MaxInt16
+				}
+				if v < math.MinInt16 {
+					v = math.MinInt16
+				}
+				u := uint16(int16(v))
+				r.buf = append(r.buf, byte(u), byte(u>>8))
+			}
+		}
+		r.pos = 0
+	}
+	n := copy(p, r.buf[r.pos:])
+	r.pos += n
+	return n, nil
 }
