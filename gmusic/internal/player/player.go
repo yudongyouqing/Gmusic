@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/hajimehoshi/oto"
@@ -30,24 +31,32 @@ type Player struct {
 	volume          float32 // 0.0 - 1.0
 	currentFilePath string
 	bytesPerSec     float64
+
+	stopCh chan struct{}
+	doneCh chan struct{}
 }
 
 // NewPlayer 创建播放器（延迟创建音频上下文，按每首歌参数创建）
-func NewPlayer() (*Player, error) {
-	return &Player{volume: 1.0}, nil
-}
+func NewPlayer() (*Player, error) { return &Player{volume: 1.0}, nil }
 
-// Play 播放文件（支持 .mp3 / .flac）
+// Play 播放文件（支持 .mp3 / .flac）。为防止并发关闭导致崩溃，这里会优雅停止上一次播放后再开始。
 func (p *Player) Play(filePath string) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// 停止并清理旧的
-	if p.playerInited && p.player != nil {
-		_ = p.player.Close()
-		p.playerInited = false
-		p.player = nil
+	// 若正在播放，优雅停止并等待播放循环退出
+	if p.playerInited || p.isPlaying {
+		oldDone := p.doneCh
+		if p.stopCh != nil {
+			close(p.stopCh)
+			p.stopCh = nil
+		}
+		p.mu.Unlock()
+		if oldDone != nil {
+			<-oldDone // 等待播放循环退出（释放设备）
+		}
+		p.mu.Lock()
 	}
+
+	// 清理旧文件句柄（若有）
 	if p.currentFile != nil {
 		_ = p.currentFile.Close()
 		p.currentFile = nil
@@ -55,6 +64,7 @@ func (p *Player) Play(filePath string) error {
 
 	f, err := os.Open(filePath)
 	if err != nil {
+		p.mu.Unlock()
 		return fmt.Errorf("打开文件失败: %w", err)
 	}
 	p.currentFile = f
@@ -64,6 +74,7 @@ func (p *Player) Play(filePath string) error {
 	if err != nil {
 		_ = f.Close()
 		p.currentFile = nil
+		p.mu.Unlock()
 		return err
 	}
 	p.decoder = dec
@@ -73,6 +84,7 @@ func (p *Player) Play(filePath string) error {
 	// 为该音频创建匹配的上下文
 	ctx, err := oto.NewContext(sr, ch, 2, 8192)
 	if err != nil {
+		p.mu.Unlock()
 		return fmt.Errorf("创建音频上下文失败: %w", err)
 	}
 	p.context = ctx
@@ -83,7 +95,17 @@ func (p *Player) Play(filePath string) error {
 	p.isPlaying = true
 	p.isPaused = false
 
-	go p.playLoop()
+	// 为本次播放创建停止/完成通道
+	p.stopCh = make(chan struct{})
+	p.doneCh = make(chan struct{})
+
+	// 启动播放循环
+	stopCh := p.stopCh
+	decReader := p.decoder
+	pl := p.player
+	bps := p.bytesPerSec
+	p.mu.Unlock()
+	go p.playLoop(stopCh, decReader, pl, bps)
 	return nil
 }
 
@@ -106,7 +128,6 @@ func (p *Player) getDecoder(file *os.File, filePath string) (io.Reader, float64,
 		}
 		return dec, dur, sr, ch, nil
 	case ".flac":
-		// flac 需要将每帧样本转换为 16-bit PCM 并交织
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return nil, 0, 0, 0, err
 		}
@@ -118,7 +139,6 @@ func (p *Player) getDecoder(file *os.File, filePath string) (io.Reader, float64,
 		ch := int(stream.Info.NChannels)
 		bps := int(stream.Info.BitsPerSample)
 		reader := &flacPCMReader{stream: stream, bitsPerSample: bps}
-		// 时长：样本总数 / 采样率（单位秒）
 		var dur float64
 		if stream.Info.NSamples > 0 && stream.Info.SampleRate > 0 {
 			dur = float64(stream.Info.NSamples) / float64(stream.Info.SampleRate)
@@ -129,26 +149,52 @@ func (p *Player) getDecoder(file *os.File, filePath string) (io.Reader, float64,
 	}
 }
 
-// 内部播放循环
-func (p *Player) playLoop() {
+// 播放循环：在收到 stopCh 或读到 EOF/错误时退出；退出后负责清理资源并发出 doneCh
+func (p *Player) playLoop(stopCh <-chan struct{}, dec io.Reader, pl *oto.Player, bps float64) {
+	defer func() {
+		// 清理资源放在统一位置，避免竞态导致崩溃
+		if pl != nil {
+			_ = pl.Close()
+		}
+		p.mu.Lock()
+		p.playerInited = false
+		p.player = nil
+		if p.currentFile != nil {
+			_ = p.currentFile.Close()
+			p.currentFile = nil
+		}
+		p.isPlaying = false
+		p.mu.Unlock()
+		// 通知已结束
+		p.mu.Lock()
+		done := p.doneCh
+		p.mu.Unlock()
+		if done != nil {
+			close(done)
+		}
+	}()
+
 	buf := make([]byte, 4096)
 	for {
-		p.mu.Lock()
-		playing := p.isPlaying
-		paused := p.isPaused
-		dec := p.decoder
-		pl := p.player
-		inited := p.playerInited
-		vol := p.volume
-		bps := p.bytesPerSec
-		p.mu.Unlock()
-
-		if !playing || !inited || dec == nil || pl == nil {
-			break
+		// 每次循环优先检查 stopCh，确保能被及时打断
+		select {
+		case <-stopCh:
+			return
+		default:
 		}
+
+		// 若处于暂停，仍保持对 stopCh 的响应
+		p.mu.Lock()
+		paused := p.isPaused
+		vol := p.volume
+		p.mu.Unlock()
 		if paused {
-			// 暂停：不写数据
-			continue
+			select {
+			case <-stopCh:
+				return
+			case <-time.After(80 * time.Millisecond):
+				continue
+			}
 		}
 
 		n, err := dec.Read(buf)
@@ -157,35 +203,87 @@ func (p *Player) playLoop() {
 				applyVolume16LE(buf[:n], vol)
 			}
 			if _, werr := pl.Write(buf[:n]); werr != nil {
-				break
+				return
 			}
-			p.mu.Lock()
-			p.currentPosition += float64(n) / bps
-			p.mu.Unlock()
+			if bps > 0 {
+				p.mu.Lock()
+				p.currentPosition += float64(n) / bps
+				p.mu.Unlock()
+			}
 		}
 		if err == io.EOF {
-			break
+			return
 		}
 		if err != nil && err != io.EOF {
-			break
+			return
 		}
 	}
+}
 
+// Pause 暂停（软暂停，不关闭设备）
+func (p *Player) Pause() {
 	p.mu.Lock()
-	p.isPlaying = false
-	if p.playerInited && p.player != nil {
-		_ = p.player.Close()
-		p.playerInited = false
-		p.player = nil
-	}
-	if p.currentFile != nil {
-		_ = p.currentFile.Close()
-		p.currentFile = nil
-	}
+	p.isPaused = true
 	p.mu.Unlock()
 }
 
-// applyVolume16LE 对 16-bit 小端 PCM 应用音量
+// Resume 恢复
+func (p *Player) Resume() { p.mu.Lock(); p.isPaused = false; p.mu.Unlock() }
+
+// Stop 优雅停止：通知播放循环退出并等待完成
+func (p *Player) Stop() {
+	p.mu.Lock()
+	if !p.playerInited && !p.isPlaying {
+		p.mu.Unlock()
+		return
+	}
+	oldDone := p.doneCh
+	if p.stopCh != nil {
+		close(p.stopCh)
+		p.stopCh = nil
+	}
+	p.mu.Unlock()
+	if oldDone != nil {
+		<-oldDone
+	}
+}
+
+// SetVolume 设置音量 0..1
+func (p *Player) SetVolume(volume float32) {
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 1 {
+		volume = 1
+	}
+	p.mu.Lock()
+	p.volume = volume
+	p.mu.Unlock()
+}
+
+// GetCurrentPosition 当前播放位置（秒）
+func (p *Player) GetCurrentPosition() float64 {
+	p.mu.Lock()
+	v := p.currentPosition
+	p.mu.Unlock()
+	return v
+}
+
+// GetDuration 总时长（秒）
+func (p *Player) GetDuration() float64 { p.mu.Lock(); v := p.duration; p.mu.Unlock(); return v }
+
+// IsPlaying 是否正在播放
+func (p *Player) IsPlaying() bool {
+	p.mu.Lock()
+	v := p.isPlaying && !p.isPaused
+	p.mu.Unlock()
+	return v
+}
+
+// Close 关闭
+func (p *Player) Close() error { p.Stop(); return nil }
+
+// 16-bit 小端 PCM 应用音量
 func applyVolume16LE(b []byte, volume float32) {
 	if volume <= 0 {
 		for i := range b {
@@ -209,81 +307,7 @@ func applyVolume16LE(b []byte, volume float32) {
 	}
 }
 
-// Pause 暂停
-func (p *Player) Pause() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.isPaused = true
-}
-
-// Resume 恢复
-func (p *Player) Resume() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.isPaused = false
-}
-
-// Stop 停止
-func (p *Player) Stop() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.isPlaying = false
-	p.isPaused = false
-	p.currentPosition = 0
-	if p.playerInited && p.player != nil {
-		_ = p.player.Close()
-		p.playerInited = false
-		p.player = nil
-	}
-	if p.currentFile != nil {
-		_ = p.currentFile.Close()
-		p.currentFile = nil
-	}
-}
-
-// SetVolume 设置音量 0..1
-func (p *Player) SetVolume(volume float32) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if volume < 0 {
-		volume = 0
-	}
-	if volume > 1 {
-		volume = 1
-	}
-	p.volume = volume
-}
-
-// GetCurrentPosition 当前播放位置（秒）
-func (p *Player) GetCurrentPosition() float64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.currentPosition
-}
-
-// GetDuration 总时长（秒）
-func (p *Player) GetDuration() float64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.duration
-}
-
-// IsPlaying 是否正在播放
-func (p *Player) IsPlaying() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.isPlaying && !p.isPaused
-}
-
-// Close 关闭
-func (p *Player) Close() error {
-	p.Stop()
-	return nil
-}
-
-// flacPCMReader 将 mewkiz/flac 流转换为交织的 16-bit PCM 字节流
-// 注：该实现不做采样率转换，直接以原始采样率输出
-
+// flacPCMReader 将 mewkiz/flac 流转换为交织的 16-bit PCM 字节流（不重采样）
 type flacPCMReader struct {
 	stream        *flac.Stream
 	bitsPerSample int
@@ -291,9 +315,8 @@ type flacPCMReader struct {
 	pos           int
 }
 
-func (r *flacPCMReader) Read(p []byte) (int, error) {
+func (r *flacPCMReader) Read(p []byte) (n int, err error) {
 	for r.pos >= len(r.buf) {
-		// 需要填充下一帧
 		fr, err := r.stream.ParseNext()
 		if err != nil {
 			return 0, err
@@ -303,8 +326,9 @@ func (r *flacPCMReader) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 		block := len(fr.Subframes[0].Samples)
-		if cap(r.buf) < chs*block*2 {
-			r.buf = make([]byte, 0, chs*block*2)
+		need := chs * block * 2
+		if cap(r.buf) < need {
+			r.buf = make([]byte, 0, need)
 		} else {
 			r.buf = r.buf[:0]
 		}
@@ -316,7 +340,7 @@ func (r *flacPCMReader) Read(p []byte) (int, error) {
 			for c := 0; c < chs; c++ {
 				v := int32(fr.Subframes[c].Samples[i])
 				if shift > 0 {
-					v = v >> uint(shift)
+					v >>= uint(shift)
 				}
 				if v > math.MaxInt16 {
 					v = math.MaxInt16
@@ -330,7 +354,7 @@ func (r *flacPCMReader) Read(p []byte) (int, error) {
 		}
 		r.pos = 0
 	}
-	n := copy(p, r.buf[r.pos:])
+	n = copy(p, r.buf[r.pos:])
 	r.pos += n
 	return n, nil
 }

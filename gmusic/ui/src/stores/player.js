@@ -10,6 +10,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const lyrics = ref(null)
   const playerStatus = ref({ position: 0, duration: 0 })
+  const playPending = ref(false)
 
   // getters
   const songList = () => searchResults.value || songs.value
@@ -30,14 +31,26 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function playSong(song) {
-    currentSong.value = song
-    await play(song.file_path)
-    isPlaying.value = true
+    if (playPending.value) return
+    playPending.value = true
     try {
-      const { data } = await getLyrics(song.id)
-      lyrics.value = data
-    } catch {
-      lyrics.value = null
+      currentSong.value = song
+      await play(song.file_path)
+      isPlaying.value = true
+      try {
+        const { data } = await getLyrics(song.id)
+        lyrics.value = data
+      } catch {
+        lyrics.value = null
+      }
+    } catch (e) {
+      // 前端可视化错误提示
+      const msg = e?.response?.data?.error || e?.message || '播放失败'
+      // eslint-disable-next-line no-alert
+      alert(`播放失败：${msg}`)
+      isPlaying.value = false
+    } finally {
+      playPending.value = false
     }
   }
 
@@ -78,7 +91,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   return {
     // state
-    songs, searchResults, currentSong, isPlaying, lyrics, playerStatus,
+    songs, searchResults, currentSong, isPlaying, lyrics, playerStatus, playPending,
     // getters
     songList,
     // actions

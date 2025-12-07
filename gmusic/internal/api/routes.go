@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -28,12 +29,15 @@ var (
 // SetupRouter 设置路由
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	router := gin.Default()
-	// 启用 CORS 允许前端 http://localhost:5173 访问
+
+	// 放开本地开发的 CORS（localhost/127.0.0.1:5173；也可直接全放开，便于调试）
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization"},
-		AllowCredentials: true,
+		AllowAllOrigins:  true, // 本地调试最省心；若要收敛可改为 AllowOrigins 指定 5173 源
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
 	}))
 
 	// 初始化播放器
@@ -49,7 +53,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	router.GET("/api/songs/:id", getSongByID(db))
 	router.POST("/api/songs", addSong(db))
 
-	// 播放控制 API
+	// 播放控制 API（在 play 里已做详细日志与校验）
 	router.POST("/api/player/play", playHandler())
 	router.POST("/api/player/pause", pauseHandler())
 	router.POST("/api/player/resume", resumeHandler())
@@ -159,7 +163,7 @@ func addSong(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// playHandler 播放处理
+// playHandler 播放处理（增加日志与文件存在校验）
 func playHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
@@ -171,7 +175,18 @@ func playHandler() gin.HandlerFunc {
 			return
 		}
 
+		fmt.Printf("/api/player/play -> %s\n", req.FilePath)
+		if req.FilePath == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file_path 不能为空"})
+			return
+		}
+		if _, err := os.Stat(req.FilePath); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("文件不存在或不可读: %v", err)})
+			return
+		}
+
 		if err := audioPlayer.Play(req.FilePath); err != nil {
+			fmt.Printf("播放失败: %v\n", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
