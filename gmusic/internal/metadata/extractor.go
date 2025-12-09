@@ -14,6 +14,17 @@ import (
 	"github.com/yudongyouqing/GMusic/internal/storage"
 )
 
+// AudioInfo 音频探测信息（用于接口返回）
+type AudioInfo struct {
+	Format        string `json:"format"`
+	Duration      int    `json:"duration"`       // 秒
+	DurationText  string `json:"duration_text"` 
+	SampleRate    int    `json:"sample_rate"`    // Hz
+	Channels      int    `json:"channels"`
+	BitsPerSample int    `json:"bits_per_sample"`
+	FilePath      string `json:"file_path"`
+}
+
 // ExtractMetadata 从音频文件提取元数据
 func ExtractMetadata(filePath string) (*storage.Song, error) {
 	file, err := os.Open(filePath)
@@ -56,41 +67,65 @@ func ExtractMetadata(filePath string) (*storage.Song, error) {
 
 // ComputeDurationSeconds 计算音频时长（秒），支持 mp3/flac，其他返回 0
 func ComputeDurationSeconds(filePath string) int {
+	info, err := ProbeAudio(filePath)
+	if err != nil {
+		return 0
+	}
+	return info.Duration
+}
+
+// ProbeAudio 探测音频基础信息（时长/采样率/声道/位深）
+func ProbeAudio(filePath string) (*AudioInfo, error) {
+	ai := &AudioInfo{FilePath: filePath, Format: getFormat(filePath)}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".mp3":
 		f, err := os.Open(filePath)
-		if err != nil {
-			return 0
-		}
+		if err != nil { return nil, err }
 		defer f.Close()
 		dec, err := mp3.NewDecoder(f)
-		if err != nil {
-			return 0
-		}
-		sr := float64(dec.SampleRate())
-		ch := 2.0
-		bps := sr * ch * 2.0
-		if bps <= 0 {
-			return 0
-		}
-		sec := int(float64(dec.Length()) / bps)
-		if sec < 0 { sec = 0 }
-		return sec
+		if err != nil { return nil, err }
+		sr := dec.SampleRate()
+		ch := 2
+		bps := float64(sr*ch) * 2
+		var sec int
+		if bps > 0 { sec = int(float64(dec.Length()) / bps) }
+		ai.SampleRate, ai.Channels, ai.BitsPerSample = sr, ch, 16
+		ai.Duration = max0(sec)
+		ai.DurationText = FormatDuration(ai.Duration)
+		return ai, nil
 	case ".flac":
 		f, err := os.Open(filePath)
-		if err != nil { return 0 }
+		if err != nil { return nil, err }
 		defer f.Close()
 		stream, err := flac.New(f)
-		if err != nil { return 0 }
-		if stream.Info.SampleRate == 0 { return 0 }
-		sec := int(stream.Info.NSamples / uint64(stream.Info.SampleRate))
-		if sec < 0 { sec = 0 }
-		return sec
+		if err != nil { return nil, err }
+		sr := int(stream.Info.SampleRate)
+		ch := int(stream.Info.NChannels)
+		bps := int(stream.Info.BitsPerSample)
+		var sec int
+		if stream.Info.SampleRate > 0 { sec = int(stream.Info.NSamples / uint64(stream.Info.SampleRate)) }
+		ai.SampleRate, ai.Channels, ai.BitsPerSample = sr, ch, bps
+		ai.Duration = max0(sec)
+		ai.DurationText = FormatDuration(ai.Duration)
+		return ai, nil
 	default:
-		return 0
+		// 其他格式未实现
+		ai.Duration = 0
+		ai.DurationText = "00:00"
+		return ai, nil
 	}
 }
+
+// FormatDuration 将秒格式化为 00:00 形式
+func FormatDuration(sec int) string {
+	if sec < 0 { sec = 0 }
+	m := sec / 60
+	s := sec % 60
+	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+func max0(v int) int { if v < 0 { return 0 }; return v }
 
 // getFormat 获取文件格式
 func getFormat(filePath string) string {
@@ -124,9 +159,7 @@ func saveCover(data []byte, audioPath string) string {
 }
 
 // GetBitRate 获取比特率（占位实现）
-func GetBitRate(filePath string) int {
-	return 320
-}
+func GetBitRate(filePath string) int { return 320 }
 
 // ExtractLyrics 从文件提取歌词（如果有 .lrc 文件）
 func ExtractLyrics(audioPath string) (string, error) {
@@ -180,3 +213,4 @@ func ExtractID3v2Info(filePath string) (map[string]interface{}, error) {
 func decodeSize(data []byte) int {
 	return (int(data[0]) << 21) | (int(data[1]) << 14) | (int(data[2]) << 7) | int(data[3])
 }
+
