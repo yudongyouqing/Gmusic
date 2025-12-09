@@ -34,12 +34,32 @@ function onSelect(song) { emit('select', song) }
 </script>
 
 <style scoped>
-.song-list { display:flex; flex-direction: column; height: 100%; min-height: 0; }
+.song-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0; /* 关键：允许在父容器中拉伸 */
+}
 
-.list-head { display:grid; grid-template-columns: 56px 1.5fr 1fr 60px; align-items:center; gap:12px; height: 36px; padding: 0 12px; color:#666; font-size: 12px; }
+.list-head {
+  display: grid;
+  grid-template-columns: 56px 1.5fr 1fr 60px;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px;
+  color: #666;
+  font-size: 12px;
+}
 .list-head .col.cover { text-align: left; }
 .list-head .col.duration { text-align: right; }
 
-.songs { flex: 1; overflow-y: auto; min-height: 0; }
-.empty { text-align:center; color:#999; padding: 40px 0; }
+.songs {
+  flex: 1 1 0;          /* 关键：占满剩余高度 */
+  min-height: 0;        /* 关键：允许内部滚动 */
+  overflow-y: auto;
+  padding-bottom: 6px;  /* 与底部条留出极小安全距离 */
+}
+
+.empty { text-align: center; color: #999; padding: 40px 0; }
 </style>
