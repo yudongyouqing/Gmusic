@@ -17,3 +17,7 @@ export const scan = (dir_path, workers = 4) => http.post('/scan', { dir_path, wo
 
 // 工具：批量补全时长
 export const refreshDurations = () => http.post('/refresh/durations')
+
+// 音频信息 & 更新歌曲
+export const audioInfoById = (id) => http.get(`/audio/${id}/info`)
+export const updateSong = (id, payload) => http.put(`/songs/${id}`, payload)

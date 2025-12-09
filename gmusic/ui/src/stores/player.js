@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getSongs, searchSongs, play, pause, resume, stop, setVolume, status, getLyrics, scan, seek } from '../api/music'
+import { getSongs, searchSongs, play, pause, resume, stop, setVolume, status, getLyrics, scan, seek, audioInfoById, updateSong } from '../api/music'
 
 export const usePlayerStore = defineStore('player', () => {
   // state
@@ -14,6 +14,9 @@ export const usePlayerStore = defineStore('player', () => {
 
   // 播放模式：loop（列表循环）/ shuffle（随机）
   const playMode = ref('loop')
+
+  // 记录已探测过的歌曲，避免重复请求
+  const probed = ref(new Set())
 
   // getters
   const songList = () => searchResults.value || songs.value
@@ -29,6 +32,46 @@ export const usePlayerStore = defineStore('player', () => {
   async function fetchSongs() {
     const { data } = await getSongs()
     songs.value = data.songs || []
+    // 后台补全缺失时长（非阻塞）
+    setTimeout(() => updateMissingDurations().catch(() => {}), 0)
+  }
+
+  async function updateMissingDurations() {
+    const list = songList() || []
+    // 只处理 duration<=0 且未探测过的
+    const targets = list.filter(s => (!s.duration || s.duration <= 0) && !probed.value.has(s.id))
+    if (!targets.length) return
+
+    const limit = 3 // 并发限制
+    let idx = 0
+    async function worker() {
+      while (idx < targets.length) {
+        const cur = targets[idx++]
+        probed.value.add(cur.id)
+        try {
+          const { data: info } = await audioInfoById(cur.id)
+          if (info?.duration > 0) {
+            // 更新 songs/searchResults 列表里的该条
+            const apply = (arr) => {
+              if (!arr) return
+              const i = arr.findIndex(x => x.id === cur.id)
+              if (i >= 0) arr[i] = { ...arr[i], duration: info.duration }
+            }
+            apply(songs.value)
+            apply(searchResults.value)
+            // 如当前播放正是该条，也更新当前状态
+            if (currentSong.value && currentSong.value.id === cur.id) {
+              currentSong.value = { ...currentSong.value, duration: info.duration }
+              playerStatus.value = { ...playerStatus.value, duration: info.duration }
+            }
+            // 持久化到 DB
+            await updateSong(cur.id, { duration: info.duration })
+          }
+        } catch (_) { /* 忽略单条错误 */ }
+      }
+    }
+    const jobs = Array.from({ length: Math.min(limit, targets.length) }, () => worker())
+    await Promise.all(jobs)
   }
 
   async function doSearch(keyword) {
@@ -38,6 +81,8 @@ export const usePlayerStore = defineStore('player', () => {
     }
     const { data } = await searchSongs(keyword)
     searchResults.value = data.songs || []
+    // 搜索结果页也尝试后台补全
+    setTimeout(() => updateMissingDurations().catch(() => {}), 0)
   }
 
   async function playSong(song) {
@@ -52,6 +97,22 @@ export const usePlayerStore = defineStore('player', () => {
         lyrics.value = data
       } catch {
         lyrics.value = null
+      }
+      // 播放后若时长为 0，则探测并缓存（本地 + 数据库）
+      if (!song.duration || song.duration <= 0) {
+        try {
+          const { data: info } = await audioInfoById(song.id)
+          if (info?.duration > 0) {
+            // 更新当前播放与列表缓存
+            currentSong.value = { ...currentSong.value, duration: info.duration }
+            playerStatus.value = { ...playerStatus.value, duration: info.duration }
+            const list = songList() || []
+            const idx = list.findIndex(s => s.id === song.id)
+            if (idx >= 0) list[idx] = { ...list[idx], duration: info.duration }
+            // 持久化到数据库
+            await updateSong(song.id, { duration: info.duration })
+          }
+        } catch (_) { /* 忽略探测失败 */ }
       }
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message || '播放失败'
@@ -138,6 +199,6 @@ export const usePlayerStore = defineStore('player', () => {
     // getters
     songList,
     // actions
-    fetchSongs, doSearch, playSong, playByIndex, nextSong, prevSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus, seekTo, scanDir, setPlayMode,
+    fetchSongs, updateMissingDurations, doSearch, playSong, playByIndex, nextSong, prevSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus, seekTo, scanDir, setPlayMode,
   }
 })
