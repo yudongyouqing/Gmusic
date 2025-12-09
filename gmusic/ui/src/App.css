@@ -4,28 +4,42 @@
   box-sizing: border-box;
 }
 
+:root{
+  /* Mica 风格参数，可按需微调 */
+  --mica-surface: rgba(255,255,255,0.45);
+  --mica-surface-strong: rgba(255,255,255,0.60);
+  --mica-border: rgba(255,255,255,0.35);
+  --mica-shadow: 0 20px 60px rgba(0,0,0,0.30);
+  --mica-blur: 18px;
+  --mica-saturate: 160%;
+  --bottom-bar-height: 72px; /* 供页面计算安全区 */
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* 背景用渐变模拟壁纸，供 backdrop-filter 产生“云母”效果 */
+  background: radial-gradient(1000px 600px at 20% 0%, #667eea55 0%, transparent 60%),
+              radial-gradient(800px 500px at 100% 0%, #764ba255 0%, transparent 60%),
+              linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
 }
 
-.app {
-  width: 100%;
-  min-height: 100vh;
-  padding: 20px;
-}
+.app { width: 100%; min-height: 100vh; padding: 20px; }
 
 .container {
   max-width: 1400px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.95);
+  /* 云母（Mica）容器：半透明+模糊+饱和 */
+  background: var(--mica-surface);
+  backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  -webkit-backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  border: 1px solid var(--mica-border);
   border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--mica-shadow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -33,52 +47,81 @@ body {
 }
 
 .header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* 顶部条也采用 Mica 效果，略强化不透明度 */
+  background: var(--mica-surface-strong);
+  backdrop-filter: blur(calc(var(--mica-blur) - 4px)) saturate(calc(var(--mica-saturate) + 20%));
+  -webkit-backdrop-filter: blur(calc(var(--mica-blur) - 4px)) saturate(calc(var(--mica-saturate) + 20%));
+  border-bottom: 1px solid var(--mica-border);
   color: white;
   padding: 30px;
   text-align: center;
 }
 
-.header h1 {
-  font-size: 2.5em;
-  margin-bottom: 20px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-}
+.header h1 { font-size: 2.5em; margin-bottom: 12px; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2); }
+.nav { margin-top: 6px; }
+.nav .nav-link { color: #fff; opacity: 0.95; text-decoration: none; margin: 0 8px; }
+.nav .nav-link:hover { opacity: 1; text-decoration: underline; }
 
 .main-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
+  display: flex; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0; /* 外壳自身不留边，内部布局掌控 */
+  /* 底部迷你条的安全区，防止内容被遮挡 */
+  padding-bottom: calc(20px + var(--bottom-bar-height) + env(safe-area-inset-bottom, 0px));
 }
+/* 新增主壳布局：左侧 Sidebar + 右侧内容区 */
+.main-shell { display: flex; flex: 1; height: 100%; min-height: 0; }
+.content { flex: 1 1 auto; min-width: 0; padding: 12px 20px; height: 100%; box-sizing: border-box; overflow: hidden; }
+
+.page, .page-library { width: 100%; min-width: 0; box-sizing: border-box; }
+.page-library { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.card--fill { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* 通用卡片样式（Mica 面板） */
+.card {
+  width: 100%;
+  background: var(--mica-surface);
+  backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  -webkit-backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  border: 1px solid var(--mica-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+  padding: 16px;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+}
+.card--compact { padding: 12px; margin-bottom: 12px; }
 
 .left-panel {
-  width: 40%;
+  flex: 0 0 40%;
   padding: 30px;
-  border-right: 1px solid #eee;
+  border-right: 1px solid rgba(255,255,255,0.2);
   overflow-y: auto;
-  background: linear-gradient(to bottom, #f8f9ff, #f0f0ff);
+  background: var(--mica-surface);
+  backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  -webkit-backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate));
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .right-panel {
-  width: 60%;
+  flex: 1 1 0;
   padding: 30px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 @media (max-width: 768px) {
-  .main-content {
-    flex-direction: column;
-  }
-
-  .left-panel,
-  .right-panel {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #eee;
-  }
-
-  .header h1 {
-    font-size: 1.5em;
-  }
+  .main-content { flex-direction: column; padding: 16px; }
+  .left-panel, .right-panel { flex: 1 1 auto; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.2); }
+  .header h1 { font-size: 1.5em; }
 }
 
+/* 降低动效/透明度的可访问性处理 */
+@media (prefers-reduced-transparency: reduce) {
+  .container, .card, .left-panel, .header {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(255,255,255,0.9) !important;
+  }
+}

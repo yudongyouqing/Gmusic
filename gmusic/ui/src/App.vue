@@ -1,22 +1,24 @@
 <template>
   <div class="app">
     <div class="container">
-      <header class="header">
-        <h1>GMusic 本地音乐播放器</h1>
-        <nav class="nav">
-          <RouterLink to="/" class="nav-link">音乐库</RouterLink>
-          <span class="sep">|</span>
-          <RouterLink to="/now-playing" class="nav-link">正在播放</RouterLink>
-        </nav>
-      </header>
-
+      <!-- 顶部大标题已移除，采用 Sidebar + TopBar 布局 -->
       <div class="main-content">
-        <RouterView />
+        <div class="main-shell">
+          <Sidebar />
+          <div class="content">
+            <RouterView />
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- 迷你播放器条，固定在页面底部 -->
+    <MiniPlayerBar />
   </div>
 </template>
 
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
+import MiniPlayerBar from './components/MiniPlayerBar.vue'
+import Sidebar from './components/Sidebar.vue'
 </script>

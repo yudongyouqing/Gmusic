@@ -44,13 +44,48 @@ async function startScan() {
 </script>
 
 <style scoped>
-.scan-panel { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-.row { display: flex; gap: 8px; align-items: center; }
-.scan-input { flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; }
-.scan-workers { width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; }
-.scan-btn { padding: 10px 16px; border: none; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; cursor: pointer; }
+.scan-panel { 
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff; 
+  border-radius: 12px; 
+  padding: 12px; 
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+}
+.row { 
+  display: flex; 
+  gap: 8px; 
+  align-items: center; 
+  flex-wrap: wrap; /* 小屏换行，避免溢出 */
+}
+.scan-input { 
+  flex: 1 1 auto; 
+  min-width: 0;            /* 允许在 flex 下收缩，避免水平溢出 */
+  padding: 10px 12px; 
+  border: 1px solid #ddd; 
+  border-radius: 8px; 
+  box-sizing: border-box;  /* 包含 padding 与边框 */
+}
+.scan-workers { 
+  width: 84px; 
+  padding: 8px; 
+  border: 1px solid #ddd; 
+  border-radius: 8px; 
+  box-sizing: border-box;
+}
+.scan-btn { 
+  padding: 10px 16px; 
+  border: none; 
+  border-radius: 8px; 
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+  color: #fff; 
+  cursor: pointer; 
+}
 .scan-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .tips { margin-top: 6px; color: #666; font-size: 12px; }
 .msg { color: #333; margin-top: 4px; }
-</style>
 
+@media (max-width: 768px) {
+  .scan-workers, .scan-btn { height: 40px; }
+}
+</style>

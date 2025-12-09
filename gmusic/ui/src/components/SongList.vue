@@ -1,38 +1,45 @@
 <template>
   <div class="song-list">
-    <h3>播放列表 ({{ songs?.length || 0 }})</h3>
+    <!-- 表头（可选） -->
+    <div class="list-head">
+      <div class="col cover">封面</div>
+      <div class="col title">标题 / 歌手</div>
+      <div class="col album">专辑</div>
+      <div class="col duration">时长</div>
+    </div>
+
     <div class="songs">
-      <div
-        v-for="song in songs"
-        :key="song.id"
-        class="song-item"
-        :class="{ active: currentSong && currentSong.id === song.id }"
-        @click="$emit('select', song)"
-      >
-        <div class="song-info">
-          <div class="song-title">{{ song.title }}</div>
-          <div class="song-artist">{{ song.artist }}</div>
-        </div>
-        <div class="song-duration">{{ formatDuration(song.duration) }}</div>
-      </div>
+      <SongRow
+        v-for="s in songs"
+        :key="s.id"
+        :song="s"
+        :active="currentSong && currentSong.id === s.id"
+        @select="() => onSelect(s)"
+      />
       <div v-if="!songs || songs.length === 0" class="empty">暂无歌曲</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import './SongList.css'
+import SongRow from './SongRow.vue'
 
 const props = defineProps({
   songs: { type: Array, default: () => [] },
   currentSong: Object
 })
 
-function formatDuration(seconds) {
-  const s = Math.max(0, Math.floor(seconds || 0))
-  const mins = Math.floor(s / 60)
-  const secs = s % 60
-  return `${mins}:${String(secs).padStart(2, '0')}`
-}
+const emit = defineEmits(['select'])
+function onSelect(song) { emit('select', song) }
 </script>
 
+<style scoped>
+.song-list { display:flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.list-head { display:grid; grid-template-columns: 56px 1.5fr 1fr 60px; align-items:center; gap:12px; height: 36px; padding: 0 12px; color:#666; font-size: 12px; }
+.list-head .col.cover { text-align: left; }
+.list-head .col.duration { text-align: right; }
+
+.songs { flex: 1; overflow-y: auto; min-height: 0; }
+.empty { text-align:center; color:#999; padding: 40px 0; }
+</style>

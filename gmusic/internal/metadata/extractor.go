@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/dhowden/tag"
+	"github.com/hajimehoshi/go-mp3"
+	"github.com/mewkiz/flac"
 	"github.com/yudongyouqing/GMusic/internal/storage"
 )
 
@@ -33,7 +35,7 @@ func ExtractMetadata(filePath string) (*storage.Song, error) {
 		Artist:   md.Artist(),
 		Album:    md.Album(),
 		FilePath: filePath,
-		Duration: 0, // 时长后续由解码器或扫描阶段计算
+		Duration: 0, // 先置 0，下面尝试计算
 		TrackNum: track,
 		Year:     md.Year(),
 		Format:   getFormat(filePath),
@@ -44,7 +46,50 @@ func ExtractMetadata(filePath string) (*storage.Song, error) {
 		song.CoverURL = saveCover(pic.Data, filePath)
 	}
 
+	// 补充计算时长
+	if d := ComputeDurationSeconds(filePath); d > 0 {
+		song.Duration = d
+	}
+
 	return song, nil
+}
+
+// ComputeDurationSeconds 计算音频时长（秒），支持 mp3/flac，其他返回 0
+func ComputeDurationSeconds(filePath string) int {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".mp3":
+		f, err := os.Open(filePath)
+		if err != nil {
+			return 0
+		}
+		defer f.Close()
+		dec, err := mp3.NewDecoder(f)
+		if err != nil {
+			return 0
+		}
+		sr := float64(dec.SampleRate())
+		ch := 2.0
+		bps := sr * ch * 2.0
+		if bps <= 0 {
+			return 0
+		}
+		sec := int(float64(dec.Length()) / bps)
+		if sec < 0 { sec = 0 }
+		return sec
+	case ".flac":
+		f, err := os.Open(filePath)
+		if err != nil { return 0 }
+		defer f.Close()
+		stream, err := flac.New(f)
+		if err != nil { return 0 }
+		if stream.Info.SampleRate == 0 { return 0 }
+		sec := int(stream.Info.NSamples / uint64(stream.Info.SampleRate))
+		if sec < 0 { sec = 0 }
+		return sec
+	default:
+		return 0
+	}
 }
 
 // getFormat 获取文件格式
@@ -80,7 +125,6 @@ func saveCover(data []byte, audioPath string) string {
 
 // GetBitRate 获取比特率（占位实现）
 func GetBitRate(filePath string) int {
-	// TODO: 不同格式分别实现；当前返回一个合理的上限
 	return 320
 }
 
