@@ -16,14 +16,23 @@ import (
 	"github.com/mewkiz/flac"
 )
 
+// 为 v1 版本固定一个输出参数，避免频繁创建 Context 造成设备异常
+const (
+	fixedSampleRate   = 44100
+	fixedChannelCount = 2
+	fixedBytesPerSamp = 2 // 16-bit
+)
+
 // Player 基于 oto v1 的播放器，支持 MP3 与 FLAC（16-bit PCM 输出）
 type Player struct {
-	mu              sync.Mutex
-	currentFile     *os.File
-	decoder         io.Reader
-	context         *oto.Context
-	player          *oto.Player
-	playerInited    bool
+	mu           sync.Mutex
+	context      *oto.Context // Context 单例（仅创建一次）
+	player       *oto.Player
+	playerInited bool
+
+	currentFile *os.File
+	decoder     io.Reader
+
 	isPlaying       bool
 	isPaused        bool
 	currentPosition float64 // 秒（由已写入字节推算）
@@ -38,8 +47,18 @@ type Player struct {
 	doneCh chan struct{}
 }
 
-// NewPlayer 创建播放器（延迟创建音频上下文，按每首歌参数创建）
-func NewPlayer() (*Player, error) { return &Player{volume: 1.0}, nil }
+// NewPlayer 创建播放器，固定创建一个 Context，后续重复复用（v1 建议如此）
+func NewPlayer() (*Player, error) {
+	ctx, err := oto.NewContext(fixedSampleRate, fixedChannelCount, fixedBytesPerSamp, 8192)
+	if err != nil {
+		return nil, fmt.Errorf("创建音频上下文失败: %w", err)
+	}
+	return &Player{
+		context:     ctx,
+		volume:      1.0,
+		bytesPerSec: float64(fixedSampleRate * fixedChannelCount * fixedBytesPerSamp),
+	}, nil
+}
 
 // Play 兼容旧调用：从 0 秒开始
 func (p *Player) Play(filePath string) error { return p.playAt(filePath, 0) }
@@ -89,7 +108,7 @@ func (p *Player) playAt(filePath string, startSec float64) error {
 	p.currentFile = f
 	p.currentFilePath = filePath
 
-	dec, dur, sr, ch, err := p.getDecoder(f, filePath)
+	dec, dur, _, _, err := p.getDecoder(f, filePath)
 	if err != nil {
 		_ = f.Close()
 		p.currentFile = nil
@@ -98,15 +117,18 @@ func (p *Player) playAt(filePath string, startSec float64) error {
 	}
 	p.decoder = dec
 	p.duration = dur
-	p.bytesPerSec = float64(sr*ch) * 2 // 16-bit
+	// bytesPerSec 统一采用固定输出参数
+	p.bytesPerSec = float64(fixedSampleRate * fixedChannelCount * fixedBytesPerSamp)
 
-	// 为该音频创建匹配的上下文
-	ctx, err := oto.NewContext(sr, ch, 2, 8192)
-	if err != nil {
-		p.mu.Unlock()
-		return fmt.Errorf("创建音频上下文失败: %w", err)
+	// 使用已创建的 Context，避免重复创建导致设备异常
+	if p.context == nil {
+		ctx, err := oto.NewContext(fixedSampleRate, fixedChannelCount, fixedBytesPerSamp, 8192)
+		if err != nil {
+			p.mu.Unlock()
+			return fmt.Errorf("创建音频上下文失败: %w", err)
+		}
+		p.context = ctx
 	}
-	p.context = ctx
 	p.player = p.context.NewPlayer()
 	p.playerInited = true
 
@@ -237,8 +259,7 @@ func (p *Player) playLoop(stopCh <-chan struct{}, dec io.Reader, pl *oto.Player,
 				p.mu.Unlock()
 				if n > 0 {
 					copy(buf[:n], slice)
-				} else {
-					// 全部被跳过，本轮不写
+				} else { /* 本轮均被跳过 */
 				}
 			}
 
@@ -265,7 +286,7 @@ func (p *Player) playLoop(stopCh <-chan struct{}, dec io.Reader, pl *oto.Player,
 	}
 }
 
-// Pause / Resume / Stop / SetVolume / Getters 同前
+// 控制函数
 func (p *Player) Pause()  { p.mu.Lock(); p.isPaused = true; p.mu.Unlock() }
 func (p *Player) Resume() { p.mu.Lock(); p.isPaused = false; p.mu.Unlock() }
 func (p *Player) Stop() {

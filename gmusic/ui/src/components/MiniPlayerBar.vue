@@ -7,48 +7,74 @@
     @touchmove.passive="onTouchMove"
   >
     <div class="mini-bar__content">
-      <!-- 封面缩略图 -->
+      <!-- 封面缩略图（优先 /api/cover/:id，失败回退占位） -->
       <div class="cover">
-        <img v-if="store.currentSong?.cover_url" :src="store.currentSong.cover_url" alt="cover" />
+        <img v-if="coverSrc" :src="coverSrc" alt="cover" @error="onCoverErr" />
         <div v-else class="cover__placeholder">🎵</div>
       </div>
 
-      <!-- 标题/歌手 + 进度条 -->
-      <div class="meta">
-        <div class="title" :title="(store.currentSong?.title || '未选择歌曲')">
-          {{ store.currentSong?.title || '未选择歌曲' }}
-        </div>
-        <div class="artist" :title="(store.currentSong?.artist || '点击进入播放界面')">
-          {{ store.currentSong?.artist || '点击进入播放界面' }}
-        </div>
-        <div class="progress">
-          <div class="progress__fill" :style="{ width: progressPercent + '%' }"></div>
-        </div>
+      <!-- Ticker：默认显示当前歌词（或 标题 - 歌手），鼠标悬停时隐藏 -->
+      <div class="ticker" :title="tickerText">
+        <div class="ticker__inner">{{ tickerText }}</div>
       </div>
 
-      <!-- 控制/预留操作区 -->
-      <div class="actions" @click.stop>
+      <!-- 控制区：鼠标悬停 mini-bar 时显示，含上下首/播放/音量/播放顺序 -->
+      <div class="controls-wrap" @click.stop>
+        <button class="btn small" :class="{active: store.playMode==='shuffle'}" title="播放顺序：随机/列表循环" @click="toggleMode">
+          <span v-if="store.playMode==='shuffle'">🔀</span>
+          <span v-else>🔁</span>
+        </button>
         <button class="btn" :disabled="!canJump" title="上一首" @click="store.prevSong">⏮️</button>
         <button class="btn" :title="store.isPlaying ? '暂停' : '播放'" @click="togglePlay">
           <span v-if="store.isPlaying">⏸️</span>
           <span v-else>▶️</span>
         </button>
         <button class="btn" :disabled="!canJump" title="下一首" @click="store.nextSong">⏭️</button>
-        <!-- 预留更多操作位：喜欢/更多 -->
-        <button class="btn" :disabled="!store.currentSong" title="喜欢（预留）">💖</button>
-        <button class="btn" title="更多（预留）">⋯</button>
+
+        <!-- 音量 -->
+        <div class="volume">
+          <span class="vol-icon">🔊</span>
+          <input class="vol-range" type="range" min="0" max="100" step="1" v-model.number="localVolume" @input="onVolumeChange" />
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../stores/player'
 
 const store = usePlayerStore()
 const router = useRouter()
+
+// 计算封面 URL：优先使用后端封面接口，失败回退占位
+const hadCoverErr = ref(false)
+const coverSrc = computed(() => {
+  const s = store.currentSong
+  if (!s || hadCoverErr.value) return ''
+  return s.id ? `http://localhost:8080/api/cover/${s.id}` : (s.cover_url || '')
+})
+function onCoverErr(){ hadCoverErr.value = true }
+watch(() => store.currentSong?.id, () => { hadCoverErr.value = false })
+
+// 歌词 Ticker 文本：当前时间对应的歌词行；无歌词则使用 标题 - 歌手
+const tickerText = computed(() => {
+  const s = store.currentSong
+  if (!s) return '未选择歌曲'
+  const lines = store.lyrics?.lines || []
+  if (lines.length === 0) return `${s.title || '未知标题'} - ${s.artist || '未知歌手'}`
+  const ms = Math.floor((store.playerStatus?.position || 0) * 1000)
+  // 二分查找当前歌词行
+  let left = 0, right = lines.length - 1, idx = 0
+  while (left <= right) {
+    const mid = (left + right) >> 1
+    if (lines[mid].time <= ms) { idx = mid; left = mid + 1 } else { right = mid - 1 }
+  }
+  const text = lines[idx]?.text || ''
+  return text || `${s.title || '未知标题'} - ${s.artist || '未知歌手'}`
+})
 
 const progressPercent = computed(() => {
   const d = store.playerStatus?.duration || 0
@@ -67,7 +93,6 @@ const setupPoll = () => {
     timer = setInterval(() => store.refreshStatus().catch(() => {}), 600)
   }
 }
-
 watch(() => store.isPlaying, setupPoll)
 watch(() => store.currentSong?.id, setupPoll)
 
@@ -79,10 +104,13 @@ function togglePlay() {
   if (store.isPlaying) store.pauseSong()
   else store.resumeSong()
 }
+function toggleMode(){ store.setPlayMode(store.playMode === 'shuffle' ? 'loop' : 'shuffle') }
 
-function goNowPlaying() {
-  router.push('/now-playing')
-}
+// 音量
+const localVolume = ref(80)
+function onVolumeChange(){ store.setVolumePercent(localVolume.value) }
+
+function goNowPlaying() { router.push('/now-playing') }
 
 // 简单上滑手势：上滑超过 40px 进入播放页
 const startY = ref(0)
@@ -101,14 +129,29 @@ function onTouchMove(e) {
 .cover { width: 44px; height: 44px; border-radius: 8px; overflow: hidden; flex: 0 0 auto; background: rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center; }
 .cover img { width: 100%; height: 100%; object-fit: cover; }
 .cover__placeholder { font-size: 20px; opacity: .8; }
-.meta { flex: 1 1 auto; min-width: 0; display:flex; flex-direction:column; gap: 4px; }
-.title { font-weight: 600; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.artist { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.progress { position: relative; height: 4px; background: rgba(0,0,0,0.08); border-radius: 2px; overflow:hidden; }
-.progress__fill { position:absolute; left:0; top:0; bottom:0; width:0; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
-.actions { display:flex; gap: 8px; align-items:center; }
+
+/* 歌词 Ticker 默认显示，悬停 mini-bar 时隐藏 */
+.ticker { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+.ticker__inner { display: inline-block; padding-left: 8px; color:#222; animation: marquee 12s linear infinite; }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* 控制区默认隐藏，悬停时显示 */
+.controls-wrap { display: none; align-items: center; gap: 8px; }
+.mini-bar:hover .controls-wrap { display: flex; }
+.mini-bar:hover .ticker { display: none; }
+
 .btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.6); cursor: pointer; display:flex; align-items:center; justify-content:center; }
+.btn.small { width: 32px; height: 32px; }
+.btn.active { background: linear-gradient(135deg,#667eea22,#764ba222); }
 .btn[disabled] { opacity: .6; cursor: not-allowed; }
 .btn:hover { background: rgba(255,255,255,0.8); }
+
+.volume { display:flex; align-items:center; gap:6px; min-width: 120px; }
+.vol-icon { font-size: 14px; }
+.vol-range { width: 100px; accent-color:#667eea; }
+
+@media (max-width: 900px) {
+  .volume { display:none; } /* 窄屏隐藏音量滑块，保留按钮区域 */
+}
 @media (max-width: 768px) { :root{ --bottom-bar-height: 76px; } .btn { width: 40px; height: 40px; } }
 </style>

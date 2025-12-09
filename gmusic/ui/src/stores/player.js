@@ -178,7 +178,16 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function setVolumePercent(vol) { await setVolume(vol / 100) }
 
-  async function refreshStatus() { const { data } = await status(); playerStatus.value = data }
+  // 加可视化日志，便于排查“没看到状态”问题
+  async function refreshStatus() {
+    try {
+      const { data } = await status()
+      playerStatus.value = data
+      if (import.meta.env && import.meta.env.DEV) console.log('[player/status]', data)
+    } catch (e) {
+      console.error('[player/status] error', e)
+    }
+  }
 
   async function seekTo(sec) {
     if (sec < 0) sec = 0
