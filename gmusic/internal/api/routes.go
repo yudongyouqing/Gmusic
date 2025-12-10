@@ -316,7 +316,7 @@ func getLyrics(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "歌曲不存在"})
 			return
 		}
-		lrcContent, err := metadata.ExtractLyrics(song.FilePath)
+		lrcContent, err := metadata.ExtractLyrics(&song)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "歌词文件不存在"})
 			return

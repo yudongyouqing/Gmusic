@@ -6,10 +6,10 @@ export const useUiStore = defineStore('ui', {
     alpha: 0.45,      // 透明度 0-1
     blur: 18,         // 模糊 px
     saturate: 160,    // 饱和 %
+    lyricFontSize: 14, // 歌词字号 px
   }),
   actions: {
     applyTheme() {
-      // 不同主题的默认值（可再扩展）
       const presets = {
         current: { alpha: this.alpha, blur: this.blur, saturate: this.saturate },
         glass:   { alpha: Math.min(0.36, this.alpha), blur: Math.max(22, this.blur), saturate: Math.max(180, this.saturate) },
@@ -19,17 +19,18 @@ export const useUiStore = defineStore('ui', {
       const surfaceStrong = `rgba(255,255,255,${Math.min(0.9, p.alpha + 0.15)})`
       const blur = `${p.blur}px`
       const sat = `${p.saturate}%`
+      const lfs = `${this.lyricFontSize}px`
 
       const root = document.documentElement
       root.style.setProperty('--mica-surface', surface)
       root.style.setProperty('--mica-surface-strong', surfaceStrong)
       root.style.setProperty('--mica-blur', blur)
       root.style.setProperty('--mica-saturate', sat)
-      // 边框可随透明度变化
+      root.style.setProperty('--lyric-font-size', lfs)
       root.style.setProperty('--mica-border', `rgba(255,255,255,${Math.max(0.25, p.alpha - 0.1)})`)
     },
     saveTheme() {
-      const data = { theme: this.theme, alpha: this.alpha, blur: this.blur, saturate: this.saturate }
+      const data = { theme: this.theme, alpha: this.alpha, blur: this.blur, saturate: this.saturate, lyricFontSize: this.lyricFontSize }
       localStorage.setItem('gmusic:theme', JSON.stringify(data))
     },
     loadTheme() {
@@ -42,10 +43,10 @@ export const useUiStore = defineStore('ui', {
             this.alpha = typeof data.alpha === 'number' ? data.alpha : this.alpha
             this.blur = typeof data.blur === 'number' ? data.blur : this.blur
             this.saturate = typeof data.saturate === 'number' ? data.saturate : this.saturate
+            this.lyricFontSize = typeof data.lyricFontSize === 'number' ? data.lyricFontSize : this.lyricFontSize
           }
         }
       } catch {}
     }
   }
 })
-

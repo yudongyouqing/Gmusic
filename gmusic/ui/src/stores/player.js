@@ -12,7 +12,7 @@ export const usePlayerStore = defineStore('player', () => {
   const playerStatus = ref({ position: 0, duration: 0 })
   const playPending = ref(false)
 
-  // 播放模式：loop（列表循环）/ shuffle（随机）
+  // 播放模式：loop（列表循环）/ shuffle（随机）/ single（单曲循环）
   const playMode = ref('loop')
 
   // 记录已探测过的歌曲，避免重复请求
@@ -32,17 +32,15 @@ export const usePlayerStore = defineStore('player', () => {
   async function fetchSongs() {
     const { data } = await getSongs()
     songs.value = data.songs || []
-    // 后台补全缺失时长（非阻塞）
     setTimeout(() => updateMissingDurations().catch(() => {}), 0)
   }
 
   async function updateMissingDurations() {
     const list = songList() || []
-    // 只处理 duration<=0 且未探测过的
     const targets = list.filter(s => (!s.duration || s.duration <= 0) && !probed.value.has(s.id))
     if (!targets.length) return
 
-    const limit = 3 // 并发限制
+    const limit = 3
     let idx = 0
     async function worker() {
       while (idx < targets.length) {
@@ -51,7 +49,6 @@ export const usePlayerStore = defineStore('player', () => {
         try {
           const { data: info } = await audioInfoById(cur.id)
           if (info?.duration > 0) {
-            // 更新 songs/searchResults 列表里的该条
             const apply = (arr) => {
               if (!arr) return
               const i = arr.findIndex(x => x.id === cur.id)
@@ -59,12 +56,10 @@ export const usePlayerStore = defineStore('player', () => {
             }
             apply(songs.value)
             apply(searchResults.value)
-            // 如当前播放正是该条，也更新当前状态
             if (currentSong.value && currentSong.value.id === cur.id) {
               currentSong.value = { ...currentSong.value, duration: info.duration }
               playerStatus.value = { ...playerStatus.value, duration: info.duration }
             }
-            // 持久化到 DB
             await updateSong(cur.id, { duration: info.duration })
           }
         } catch (_) { /* 忽略单条错误 */ }
@@ -81,7 +76,6 @@ export const usePlayerStore = defineStore('player', () => {
     }
     const { data } = await searchSongs(keyword)
     searchResults.value = data.songs || []
-    // 搜索结果页也尝试后台补全
     setTimeout(() => updateMissingDurations().catch(() => {}), 0)
   }
 
@@ -98,18 +92,15 @@ export const usePlayerStore = defineStore('player', () => {
       } catch {
         lyrics.value = null
       }
-      // 播放后若时长为 0，则探测并缓存（本地 + 数据库）
       if (!song.duration || song.duration <= 0) {
         try {
           const { data: info } = await audioInfoById(song.id)
           if (info?.duration > 0) {
-            // 更新当前播放与列表缓存
             currentSong.value = { ...currentSong.value, duration: info.duration }
             playerStatus.value = { ...playerStatus.value, duration: info.duration }
             const list = songList() || []
             const idx = list.findIndex(s => s.id === song.id)
             if (idx >= 0) list[idx] = { ...list[idx], duration: info.duration }
-            // 持久化到数据库
             await updateSong(song.id, { duration: info.duration })
           }
         } catch (_) { /* 忽略探测失败 */ }
@@ -133,6 +124,7 @@ export const usePlayerStore = defineStore('player', () => {
     const list = getCurrentList()
     if (!list.length) return
     const cur = getCurrentIndex()
+    if (playMode.value === 'single') { await playByIndex(cur); return }
     let nextIdx = 0
     if (playMode.value === 'shuffle') {
       if (list.length === 1) nextIdx = 0
@@ -151,6 +143,7 @@ export const usePlayerStore = defineStore('player', () => {
     const list = getCurrentList()
     if (!list.length) return
     const cur = getCurrentIndex()
+    if (playMode.value === 'single') { await playByIndex(cur); return }
     let prevIdx = 0
     if (playMode.value === 'shuffle') {
       if (list.length === 1) prevIdx = 0
@@ -178,12 +171,15 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function setVolumePercent(vol) { await setVolume(vol / 100) }
 
-  // 加可视化日志，便于排查“没看到状态”问题
   async function refreshStatus() {
     try {
       const { data } = await status()
       playerStatus.value = data
       if (import.meta.env && import.meta.env.DEV) console.log('[player/status]', data)
+      // 播放结束自动下一首
+      if (isPlaying.value && data.duration > 0 && data.position >= data.duration - 0.5) {
+        await nextSong()
+      }
     } catch (e) {
       console.error('[player/status] error', e)
     }
@@ -197,17 +193,23 @@ export const usePlayerStore = defineStore('player', () => {
     await refreshStatus()
   }
 
-  // 扫描目录导入歌曲
   async function scanDir(dirPath, workers = 4) { await scan(dirPath, workers); setTimeout(fetchSongs, 2000); setTimeout(fetchSongs, 5000) }
 
-  function setPlayMode(mode) { if (mode !== 'loop' && mode !== 'shuffle') return; playMode.value = mode }
+  function setPlayMode(mode) {
+    const modes = ['loop', 'shuffle', 'single']
+    if (!modes.includes(mode)) return
+    playMode.value = mode
+  }
+
+  function togglePlayMode() {
+    const modes = ['loop', 'shuffle', 'single']
+    const idx = modes.indexOf(playMode.value)
+    playMode.value = modes[(idx + 1) % modes.length]
+  }
 
   return {
-    // state
     songs, searchResults, currentSong, isPlaying, lyrics, playerStatus, playPending, playMode,
-    // getters
     songList,
-    // actions
-    fetchSongs, updateMissingDurations, doSearch, playSong, playByIndex, nextSong, prevSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus, seekTo, scanDir, setPlayMode,
+    fetchSongs, updateMissingDurations, doSearch, playSong, playByIndex, nextSong, prevSong, pauseSong, resumeSong, stopSong, setVolumePercent, refreshStatus, seekTo, scanDir, setPlayMode, togglePlayMode,
   }
 })

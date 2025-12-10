@@ -47,10 +47,10 @@ async function startScan() {
 .scan-panel { 
   width: 100%;
   box-sizing: border-box;
-  background: #fff; 
-  border-radius: 12px; 
-  padding: 12px; 
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+  background: transparent; 
+  border-radius: 0; 
+  padding: 0; 
+  box-shadow: none; 
 }
 .row { 
   display: flex; 
@@ -62,28 +62,80 @@ async function startScan() {
   flex: 1 1 auto; 
   min-width: 0;            /* 允许在 flex 下收缩，避免水平溢出 */
   padding: 10px 12px; 
-  border: 1px solid #ddd; 
+  border: 1px solid rgba(0,0,0,0.08); 
   border-radius: 8px; 
+  background: rgba(255,255,255,0.7);
   box-sizing: border-box;  /* 包含 padding 与边框 */
+  font-size: 14px;
+  color: #222;
 }
+
+.scan-input::placeholder {
+  color: #999;
+}
+
+.scan-input:focus {
+  background: rgba(255,255,255,0.9);
+  border-color: rgba(0,0,0,0.15);
+  outline: none;
+}
+
 .scan-workers { 
-  width: 84px; 
+  width: 60px; 
   padding: 8px; 
-  border: 1px solid #ddd; 
+  border: 1px solid rgba(0,0,0,0.08); 
   border-radius: 8px; 
+  background: rgba(255,255,255,0.7);
   box-sizing: border-box;
+  font-size: 14px;
+  color: #222;
 }
+
+.scan-workers:focus {
+  background: rgba(255,255,255,0.9);
+  border-color: rgba(0,0,0,0.15);
+  outline: none;
+}
+
 .scan-btn { 
-  padding: 10px 16px; 
+  padding: 8px 16px; 
   border: none; 
   border-radius: 8px; 
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
   color: #fff; 
   cursor: pointer; 
+  font-size: 14px;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
-.scan-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.tips { margin-top: 6px; color: #666; font-size: 12px; }
-.msg { color: #333; margin-top: 4px; }
+
+.scan-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.scan-btn:disabled { 
+  opacity: 0.6; 
+  cursor: not-allowed; 
+}
+
+.tips { 
+  margin-top: 6px; 
+  color: #666; 
+  font-size: 12px; 
+  display: none;
+}
+
+.msg { 
+  color: #333; 
+  margin-top: 4px; 
+}
+
+@media (max-width: 1024px) {
+  .scan-workers { 
+    width: 50px; 
+  }
+}
 
 @media (max-width: 768px) {
   .scan-workers, .scan-btn { height: 40px; }

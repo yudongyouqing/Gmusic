@@ -1,29 +1,21 @@
 <template>
-  <div class="lyric-display">
-    <div class="lyric-title" v-if="lyrics?.title || lyrics?.artist">
-      <h4 v-if="lyrics?.title">{{ lyrics.title }}</h4>
-      <p v-if="lyrics?.artist">{{ lyrics.artist }}</p>
-    </div>
-
-    <div class="lyric-lines" v-if="lines && lines.length">
+  <div class="lyric-display" ref="containerRef">
+    <div class="lyric-list" :style="scrollStyle">
       <div
-        v-for="(line, idx) in windowLines"
-        :key="startIdx + idx"
+        v-for="(line, idx) in lines"
+        :key="idx"
+        :ref="el => { if (el) lineRefs[idx] = el }"
         class="lyric-line"
-        :class="{ current: startIdx + idx === currentLineIndex }"
+        :class="{ current: idx === currentLineIndex }"
       >
-        <span class="lyric-time">{{ line.time_str }}</span>
-        <span class="lyric-text">{{ line.text }}</span>
+        {{ line.text || '&nbsp;' }}
       </div>
     </div>
-
-    <div class="no-lyrics" v-else>暂无歌词</div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import './LyricDisplay.css'
+import { computed, ref, watch, onBeforeUpdate } from 'vue'
 
 const props = defineProps({
   lyrics: { type: Object, default: null },
@@ -41,9 +33,59 @@ const currentLineIndex = computed(() => {
   return idx
 })
 
-const windowSize = 5
-const startIdx = computed(() => Math.max(0, currentLineIndex.value - windowSize))
-const endIdx = computed(() => Math.min(lines.value.length, currentLineIndex.value + windowSize + 1))
-const windowLines = computed(() => lines.value.slice(startIdx.value, endIdx.value))
+const containerRef = ref(null)
+const lineRefs = ref([])
+const scrollY = ref(0)
+
+// 在 DOM 更新前清空 refs
+onBeforeUpdate(() => {
+  lineRefs.value = []
+})
+
+watch(currentLineIndex, (newIdx) => {
+  const container = containerRef.value
+  const activeLine = lineRefs.value[newIdx]
+  if (!container || !activeLine) return
+
+  const containerHeight = container.clientHeight
+  const lineTop = activeLine.offsetTop
+  const lineHeight = activeLine.offsetHeight
+
+  // 计算目标偏移量，使当前行垂直居中
+  const offset = containerHeight / 2 - lineTop - lineHeight / 2
+  scrollY.value = offset
+})
+
+const scrollStyle = computed(() => ({
+  transform: `translateY(${scrollY.value}px)`
+}))
 </script>
 
+<style scoped>
+.lyric-display {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.lyric-list {
+  width: 100%;
+  transition: transform 0.5s ease-out; /* 平滑滚动动画 */
+}
+
+.lyric-line {
+  padding: 12px 10px;
+  text-align: center;
+  color: #666;
+  font-size: 16px;
+  line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.lyric-line.current {
+  color: #222;
+  font-weight: 600;
+  font-size: 18px;
+  transform: scale(1.05);
+}
+</style>

@@ -1,18 +1,24 @@
 <template>
   <div class="page page-nowplaying">
     <div class="np-layout">
-      <!-- 左侧大封面 -->
-      <div class="panel cover-card">
+      <!-- 左侧大封面与信息 -->
+      <div class="panel cover-panel">
         <div class="cover-wrap">
           <img v-if="coverSrc" :src="coverSrc" alt="cover" @error="onCoverErr" />
-          <div v-else class="cover-placeholder">🎵</div>
+          <div v-else class="cover-placeholder" aria-label="no cover">
+          <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+            <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor"/>
+          </svg>
         </div>
-        <div class="title">{{ store.currentSong?.title || '未选择歌曲' }}</div>
-        <div class="artist">{{ store.currentSong?.artist || '未知歌手' }}</div>
+        </div>
+        <div class="info">
+          <div class="title">{{ store.currentSong?.title || '未选择歌曲' }}</div>
+          <div class="artist">{{ store.currentSong?.artist || '未知歌手' }}</div>
+        </div>
       </div>
 
       <!-- 右侧歌词与控制 -->
-      <div class="panel lyric-card">
+      <div class="panel lyric-panel">
         <div class="lyric-wrap">
           <LyricDisplay v-if="store.lyrics" :lyrics="store.lyrics" :currentTime="store.playerStatus.position" />
           <div v-else class="no-lyrics">暂无歌词</div>
@@ -36,10 +42,28 @@
 
         <!-- 控制按钮 -->
         <div class="controls">
-          <button class="ctrl" :disabled="!canJump" @click="store.prevSong" title="上一首">⏮️</button>
-          <button v-if="!store.isPlaying" class="ctrl" @click="store.resumeSong" title="播放">▶️</button>
-          <button v-else class="ctrl" @click="store.pauseSong" title="暂停">⏸️</button>
-          <button class="ctrl" :disabled="!canJump" @click="store.nextSong" title="下一首">⏭️</button>
+          <button class="ctrl" :disabled="!canJump" @click="store.prevSong" title="上一首">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M6 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <path d="M18 6l-9 6 9 6V6z" fill="currentColor" />
+            </svg>
+          </button>
+          <button v-if="!store.isPlaying" class="ctrl" @click="store.resumeSong" title="播放">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M8 5l12 7-12 7V5z" fill="currentColor" />
+            </svg>
+          </button>
+          <button v-else class="ctrl" @click="store.pauseSong" title="暂停">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M7 6h4v12H7zM13 6h4v12h-4z" fill="currentColor" />
+            </svg>
+          </button>
+          <button class="ctrl" :disabled="!canJump" @click="store.nextSong" title="下一首">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M18 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <path d="M6 6l9 6-9 6V6z" fill="currentColor" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -108,15 +132,16 @@ function formatTime(seconds) {
 .page-nowplaying { width:100%; height:100%; min-height:0; }
 .np-layout { display:grid; grid-template-columns: 380px 1fr; gap: 16px; height:100%; }
 .panel { background: var(--mica-surface); backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate)); -webkit-backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate)); border:1px solid var(--mica-border); border-radius: 12px; padding: 16px; box-sizing: border-box; }
-.cover-card { display:flex; flex-direction:column; align-items:center; gap: 12px; }
+.cover-panel { display:flex; flex-direction:column; align-items:center; gap: 16px; }
 .cover-wrap { width: 100%; aspect-ratio:1; max-width: 520px; border-radius: 12px; background: rgba(0,0,0,0.08); overflow:hidden; display:flex; align-items:center; justify-content:center; }
 .cover-wrap img { width:100%; height:100%; object-fit:cover; }
 .cover-placeholder { font-size: 48px; opacity:.8; }
-.title { font-size: 20px; font-weight:700; color:#222; text-align:center; margin-top: 6px; }
-.artist { font-size: 13px; color:#666; text-align:center; }
+.info { text-align:center; }
+.title { font-size: 20px; font-weight:700; color:#222; }
+.artist { font-size: 13px; color:#666; margin-top: 4px; }
 
-.lyric-card { display:flex; flex-direction:column; height:100%; min-height:0; }
-.lyric-wrap { flex:1; min-height:0; overflow:auto; }
+.lyric-panel { display:flex; flex-direction:column; height:100%; min-height:0; }
+.lyric-wrap { flex:1; min-height:0; overflow:hidden; /* 关键：隐藏滚动条，由内部 transform 控制 */ }
 .no-lyrics { height:100%; display:flex; align-items:center; justify-content:center; color:#999; }
 
 .seek { display:grid; grid-template-columns: 56px 1fr 56px; gap:10px; align-items:center; margin-top: 8px; }

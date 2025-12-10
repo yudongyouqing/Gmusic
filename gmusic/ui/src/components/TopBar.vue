@@ -5,25 +5,80 @@
       <div class="count" v-if="count !== undefined">{{ count }}</div>
     </div>
     <div class="center">
-      <button class="chip" :class="{ active: store.playMode==='loop' }" @click="store.setPlayMode('loop')">列表循环</button>
-      <button class="chip" :class="{ active: store.playMode==='shuffle' }" @click="store.setPlayMode('shuffle')">随机播放</button>
+      <button class="chip" :title="playModeText" @click="store.togglePlayMode()">
+        <span class="chip-inner" v-if="store.playMode === 'loop'">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 6h8a4 4 0 0 1 4 4v1" />
+            <path d="M20 11l-2-2m2 2l-2 2" />
+            <path d="M16 18H8a4 4 0 0 1-4-4v-1" />
+            <path d="M4 13l2-2m-2 2l2 2" />
+          </svg>
+          <span>列表循环</span>
+        </span>
+        <span class="chip-inner" v-else-if="store.playMode === 'shuffle'">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h4l4 6h4" />
+            <path d="M20 6l-2-2m2 2l-2 2" />
+            <path d="M4 18h4l4-6h4" />
+            <path d="M20 18l-2-2m2 2l-2 2" />
+          </svg>
+          <span>随机播放</span>
+        </span>
+        <span class="chip-inner" v-else-if="store.playMode === 'single'">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 6h8a4 4 0 0 1 4 4v1" />
+            <path d="M20 11l-2-2m2 2l-2 2" />
+            <path d="M16 18H8a4 4 0 0 1-4-4v-1" />
+            <path d="M4 13l2-2m-2 2l2 2" />
+            <path d="M12 8v8" />
+          </svg>
+          <span>单曲循环</span>
+        </span>
+      </button>
     </div>
     <div class="right" ref="rightRef">
-      <button class="icon-btn" title="补全时长" @click="onRefreshDurations">⟳</button>
-      <button class="icon-btn" title="排序（占位）">⇅</button>
-      <button class="icon-btn" title="搜索（占位）">🔍</button>
-      <button class="icon-btn" ref="themeBtnRef" title="主题/毛玻璃" @click.stop="toggleTheme">🎨</button>
+      <button class="icon-btn" title="补全时长" @click="onRefreshDurations">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M20 6v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button class="icon-btn" title="排序">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M8 6h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 18h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M5 7v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M3 9l2-2 2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 15l2 2 2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button class="icon-btn" title="搜索">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/>
+          <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="icon-btn" ref="themeBtnRef" title="主题/毛玻璃" @click.stop="toggleTheme">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M13.5 19H12a8 8 0 1 1 0-16h.5a3 3 0 1 1 0 6H11a2 2 0 1 0 0 4h2.5a2.5 2.5 0 1 1 0 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8" cy="11" r="1.2" fill="currentColor"/>
+          <circle cx="11" cy="8" r="1.2" fill="currentColor"/>
+          <circle cx="14.5" cy="10" r="1.2" fill="currentColor"/>
+          <circle cx="15.5" cy="13" r="1.2" fill="currentColor"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Teleport 到 body，避免被父级 overflow/backdrop-filter 裁剪 -->
     <teleport to="body">
-      <ThemeSwitcher v-if="showTheme" :pos="themeBtnRect" :z="5000" />
+      <ThemeSwitcher v-if="showTheme" :pos="themeBtnRect" :z="5000" @close="showTheme = false" />
     </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { refreshDurations } from '../api/music'
 import ThemeSwitcher from './ThemeSwitcher.vue'
@@ -34,6 +89,15 @@ const props = defineProps({
 })
 
 const store = usePlayerStore()
+
+const playModeText = computed(() => {
+  switch (store.playMode) {
+    case 'loop': return '列表循环'
+    case 'shuffle': return '随机播放'
+    case 'single': return '单曲循环'
+    default: return ''
+  }
+})
 
 async function onRefreshDurations() {
   try {
@@ -98,4 +162,6 @@ onBeforeUnmount(()=>{
 .right { display:flex; gap:8px; position: relative; }
 .icon-btn { width: 36px; height: 36px; border-radius: 8px; border:1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.7); cursor: pointer; }
 .icon-btn:hover, .chip:hover { background: rgba(255,255,255,0.9); }
+.chip .chip-inner { display:flex; align-items:center; gap:6px; }
+.chip svg { display:block; }
 </style>

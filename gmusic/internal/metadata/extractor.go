@@ -11,6 +11,7 @@ import (
 	"github.com/dhowden/tag"
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/mewkiz/flac"
+	"github.com/yudongyouqing/GMusic/internal/lyrics/search"
 	"github.com/yudongyouqing/GMusic/internal/storage"
 )
 
@@ -18,7 +19,7 @@ import (
 type AudioInfo struct {
 	Format        string `json:"format"`
 	Duration      int    `json:"duration"`       // 秒
-	DurationText  string `json:"duration_text"` 
+	DurationText  string `json:"duration_text"`
 	SampleRate    int    `json:"sample_rate"`    // Hz
 	Channels      int    `json:"channels"`
 	BitsPerSample int    `json:"bits_per_sample"`
@@ -33,31 +34,28 @@ func ExtractMetadata(filePath string) (*storage.Song, error) {
 	}
 	defer file.Close()
 
-	// 使用 dhowden/tag 解析（该库不提供时长）
 	md, err := tag.ReadFrom(file)
 	if err != nil {
 		return nil, fmt.Errorf("读取 metadata 失败: %w", err)
 	}
 
-	track, _ := md.Track() // 只取当前 track 序号
+	track, _ := md.Track()
 
 	song := &storage.Song{
 		Title:    md.Title(),
 		Artist:   md.Artist(),
 		Album:    md.Album(),
 		FilePath: filePath,
-		Duration: 0, // 先置 0，下面尝试计算
+		Duration: 0,
 		TrackNum: track,
 		Year:     md.Year(),
 		Format:   getFormat(filePath),
 	}
 
-	// 提取封面
 	if pic := md.Picture(); pic != nil {
 		song.CoverURL = saveCover(pic.Data, filePath)
 	}
 
-	// 补充计算时长
 	if d := ComputeDurationSeconds(filePath); d > 0 {
 		song.Duration = d
 	}
@@ -81,36 +79,47 @@ func ProbeAudio(filePath string) (*AudioInfo, error) {
 	switch ext {
 	case ".mp3":
 		f, err := os.Open(filePath)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		defer f.Close()
 		dec, err := mp3.NewDecoder(f)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		sr := dec.SampleRate()
 		ch := 2
 		bps := float64(sr*ch) * 2
 		var sec int
-		if bps > 0 { sec = int(float64(dec.Length()) / bps) }
+		if bps > 0 {
+			sec = int(float64(dec.Length()) / bps)
+		}
 		ai.SampleRate, ai.Channels, ai.BitsPerSample = sr, ch, 16
 		ai.Duration = max0(sec)
 		ai.DurationText = FormatDuration(ai.Duration)
 		return ai, nil
 	case ".flac":
 		f, err := os.Open(filePath)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		defer f.Close()
 		stream, err := flac.New(f)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		sr := int(stream.Info.SampleRate)
 		ch := int(stream.Info.NChannels)
 		bps := int(stream.Info.BitsPerSample)
 		var sec int
-		if stream.Info.SampleRate > 0 { sec = int(stream.Info.NSamples / uint64(stream.Info.SampleRate)) }
+		if stream.Info.SampleRate > 0 {
+			sec = int(stream.Info.NSamples / uint64(stream.Info.SampleRate))
+		}
 		ai.SampleRate, ai.Channels, ai.BitsPerSample = sr, ch, bps
 		ai.Duration = max0(sec)
 		ai.DurationText = FormatDuration(ai.Duration)
 		return ai, nil
 	default:
-		// 其他格式未实现
 		ai.Duration = 0
 		ai.DurationText = "00:00"
 		return ai, nil
@@ -119,15 +128,21 @@ func ProbeAudio(filePath string) (*AudioInfo, error) {
 
 // FormatDuration 将秒格式化为 00:00 形式
 func FormatDuration(sec int) string {
-	if sec < 0 { sec = 0 }
+	if sec < 0 {
+		sec = 0
+	}
 	m := sec / 60
 	s := sec % 60
 	return fmt.Sprintf("%02d:%02d", m, s)
 }
 
-func max0(v int) int { if v < 0 { return 0 }; return v }
+func max0(v int) int {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
 
-// getFormat 获取文件格式
 func getFormat(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
@@ -144,7 +159,6 @@ func getFormat(filePath string) string {
 	}
 }
 
-// saveCover 保存封面图片
 func saveCover(data []byte, audioPath string) string {
 	dir := filepath.Join(filepath.Dir(audioPath), ".covers")
 	_ = os.MkdirAll(dir, 0755)
@@ -158,20 +172,41 @@ func saveCover(data []byte, audioPath string) string {
 	return coverPath
 }
 
-// GetBitRate 获取比特率（占位实现）
 func GetBitRate(filePath string) int { return 320 }
 
-// ExtractLyrics 从文件提取歌词（如果有 .lrc 文件）
-func ExtractLyrics(audioPath string) (string, error) {
-	lrcPath := strings.TrimSuffix(audioPath, filepath.Ext(audioPath)) + ".lrc"
-	data, err := os.ReadFile(lrcPath)
-	if err != nil {
-		return "", fmt.Errorf("歌词文件不存在: %w", err)
+// ExtractLyrics 优先查找外部 .lrc 文件，找不到再尝试读取内嵌歌词，最后尝试网络搜索
+func ExtractLyrics(song *storage.Song) (string, error) {
+	// 1. 尝试外部 .lrc 文件
+	lrcPath := strings.TrimSuffix(song.FilePath, filepath.Ext(song.FilePath)) + ".lrc"
+	if data, err := os.ReadFile(lrcPath); err == nil {
+		return string(data), nil
 	}
-	return string(data), nil
+
+	// 2. 尝试内嵌歌词
+	file, err := os.Open(song.FilePath)
+	if err == nil {
+		defer file.Close()
+		md, err := tag.ReadFrom(file)
+		if err == nil {
+			if lyrics := md.Lyrics(); lyrics != "" {
+				return lyrics, nil
+			}
+		}
+	}
+
+	// 3. 尝试网络搜索
+	if song.Title != "" && song.Artist != "" {
+		lyrics, err := search.SearchNetEase(song.Title, song.Artist)
+		if err == nil && lyrics != "" {
+			// (可选) 缓存到本地
+			_ = os.WriteFile(lrcPath, []byte(lyrics), 0644)
+			return lyrics, nil
+		}
+	}
+
+	return "", fmt.Errorf("歌词文件不存在，无内嵌歌词，且网络搜索失败")
 }
 
-// 扩展：从 ID3v2 标签中提取更多信息（可选）
 func ExtractID3v2Info(filePath string) (map[string]interface{}, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -181,14 +216,12 @@ func ExtractID3v2Info(filePath string) (map[string]interface{}, error) {
 
 	info := make(map[string]interface{})
 
-	// 读取 ID3v2 头
 	header := make([]byte, 10)
 	_, err = file.Read(header)
 	if err != nil {
 		return nil, err
 	}
 
-	// 检查 ID3v2 标识
 	if bytes.Equal(header[:3], []byte("ID3")) {
 		version := header[3]
 		flags := header[5]
@@ -198,7 +231,6 @@ func ExtractID3v2Info(filePath string) (map[string]interface{}, error) {
 		info["id3_flags"] = flags
 		info["id3_size"] = size
 
-		// 读取 ID3v2 数据
 		tagData := make([]byte, size)
 		_, err = io.ReadFull(file, tagData)
 		if err != nil {
@@ -209,8 +241,6 @@ func ExtractID3v2Info(filePath string) (map[string]interface{}, error) {
 	return info, nil
 }
 
-// decodeSize 解码 ID3v2 大小字段（7 位编码）
 func decodeSize(data []byte) int {
 	return (int(data[0]) << 21) | (int(data[1]) << 14) | (int(data[2]) << 7) | int(data[3])
 }
-

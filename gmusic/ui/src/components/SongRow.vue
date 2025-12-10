@@ -2,7 +2,11 @@
   <div class="song-row" :class="{ active }" @click="$emit('select', song)">
     <div class="cover">
       <img v-if="hasCover" :src="coverSrc" alt="cover" @error="onErr" />
-      <div v-else class="cover__placeholder">🎵</div>
+      <div v-else class="cover__placeholder" aria-label="no cover">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor"/>
+        </svg>
+      </div>
       <div v-if="active" class="playing-indicator"></div>
     </div>
 

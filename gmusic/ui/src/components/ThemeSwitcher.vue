@@ -23,6 +23,11 @@
       <input type="range" min="100" max="220" step="5" v-model.number="local.saturate" @input="apply" />
     </div>
 
+    <div class="row">
+      <label>歌词字号 {{ local.lyricFontSize }}px</label>
+      <input type="range" min="12" max="18" step="1" v-model.number="local.lyricFontSize" @input="apply" />
+    </div>
+
     <div class="actions">
       <button class="btn" @click="reset">重置</button>
       <button class="btn primary" @click="save">保存</button>
@@ -34,18 +39,37 @@
 import { reactive, computed } from 'vue'
 import { useUiStore } from '../stores/ui'
 
-// 允许外部指定锚点位置（来自按钮的 getBoundingClientRect）
+const emit = defineEmits(['close'])
+
 const props = defineProps({
   pos: { type: Object, default: null },
   z: { type: Number, default: 5000 },
 })
 
 const ui = useUiStore()
-const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate })
+const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate, lyricFontSize: ui.lyricFontSize })
 
-function apply(){ ui.theme = local.theme; ui.alpha = local.alpha; ui.blur = local.blur; ui.saturate = local.saturate; ui.applyTheme() }
-function save(){ apply(); ui.saveTheme() }
-function reset(){ if(local.theme==='glass'){ local.alpha=0.36; local.blur=22; local.saturate=180 } else { local.alpha=0.45; local.blur=18; local.saturate=160 } ; apply() }
+function apply(){
+  ui.theme = local.theme
+  ui.alpha = local.alpha
+  ui.blur = local.blur
+  ui.saturate = local.saturate
+  ui.lyricFontSize = local.lyricFontSize
+  ui.applyTheme()
+}
+
+function save(){
+  apply()
+  ui.saveTheme()
+  emit('close') // 通知父组件关闭
+}
+
+function reset(){
+  if(local.theme==='glass'){ local.alpha=0.36; local.blur=22; local.saturate=180 } 
+  else { local.alpha=0.45; local.blur=18; local.saturate=160 }
+  local.lyricFontSize = 14
+  apply()
+}
 
 const popStyle = computed(()=>{
   if (!props.pos) return { position:'fixed', right:'24px', top:'72px', zIndex: props.z }
@@ -58,7 +82,6 @@ const popStyle = computed(()=>{
 </script>
 
 <style scoped>
-/* 仅负责外观，定位交给内联样式 popStyle（fixed + zIndex） */
 .theme-pop{
   width: 280px;
   padding: 14px;

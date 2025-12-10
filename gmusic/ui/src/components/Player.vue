@@ -2,7 +2,11 @@
   <div class="player">
     <div class="player-cover">
       <img v-if="currentSong?.cover_url" :src="currentSong.cover_url" alt="Cover" />
-      <div v-else class="no-cover">🎵</div>
+      <div v-else class="no-cover" aria-label="no cover">
+        <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+          <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor"/>
+        </svg>
+      </div>
     </div>
 
     <div class="player-info">
@@ -23,7 +27,11 @@
     </div>
 
     <div class="player-controls">
-      <button class="control-btn" @click="$emit('stop')" title="停止">⏹️</button>
+      <button class="control-btn" @click="$emit('stop')" title="停止">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+        </svg>
+      </button>
 
       <button
         v-if="!isPlaying"
@@ -31,7 +39,9 @@
         @click="$emit('resume')"
         title="播放"
       >
-        ▶️
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+          <path d="M8 5l12 7-12 7V5z" fill="currentColor" />
+        </svg>
       </button>
       <button
         v-else
@@ -39,12 +49,20 @@
         @click="$emit('pause')"
         title="暂停"
       >
-        ⏸️
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+          <path d="M7 6h4v12H7zM13 6h4v12h-4z" fill="currentColor" />
+        </svg>
       </button>
     </div>
 
     <div class="volume-control">
-      <span>🔊</span>
+      <span aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18">
+          <path d="M11 5l-5 4H4v6h2l5 4V5z" fill="currentColor"/>
+          <path d="M15 9a4 4 0 0 1 0 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M17.5 7a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </span>
       <input
         type="range"
         min="0"
