@@ -116,14 +116,22 @@ const tickerText = computed(() => {
   const s = store.currentSong
   if (!s) return ''
   const lines = store.lyrics?.lines || []
-  if (lines.length === 0) return ''
+  if (lines.length === 0) {
+    // 无歌词时，显示标题 - 歌手
+    return `${s.title || '未选择歌曲'} - ${s.artist || '未知歌手'}`
+  }
   const ms = Math.floor((store.playerStatus?.position || 0) * 1000)
-  let left = 0, right = lines.length - 1, idx = 0
+  let left = 0, right = lines.length - 1, idx = -1
   while (left <= right) {
     const mid = (left + right) >> 1
     if (lines[mid].time <= ms) { idx = mid; left = mid + 1 } else { right = mid - 1 }
   }
-  return lines[idx]?.text || ''
+  // 从当前时间点向前，寻找最近一条非空歌词
+  let j = idx
+  while (j >= 0 && !(lines[j]?.text || '').trim()) j--
+  if (j >= 0) return lines[j].text
+  // 还未到第一句或前面都为空，则仍显示标题 - 歌手
+  return `${s.title || '未选择歌曲'} - ${s.artist || '未知歌手'}`
 })
 
 const listLen = computed(() => (store.songList() || []).length)
@@ -255,8 +263,8 @@ function onTouchMove(e) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: translateX(var(--mini-ticker-offset, 0px));
-  transition: transform .2s ease;
+  margin-left: var(--mini-ticker-offset, -200px);
+  transition: margin-left .2s ease;
 }
 
 .ticker__inner {

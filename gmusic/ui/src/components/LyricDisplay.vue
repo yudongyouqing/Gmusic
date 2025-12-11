@@ -25,12 +25,17 @@ const props = defineProps({
 const lines = computed(() => props.lyrics?.lines || [])
 const currentLineIndex = computed(() => {
   const ctMs = Math.floor((props.currentTime || 0) * 1000)
-  let idx = 0
+  // 先找到时间上“应该到达的行”
+  let raw = -1
   for (let i = 0; i < lines.value.length; i++) {
-    if (lines.value[i].time <= ctMs) idx = i
+    if (lines.value[i].time <= ctMs) raw = i
     else break
   }
-  return idx
+  if (raw < 0) return 0
+  // 再向前回退到最近一条非空歌词，实现“无缝链接”
+  let j = raw
+  while (j > 0 && !(lines.value[j]?.text || '').trim()) j--
+  return j
 })
 
 const containerRef = ref(null)
