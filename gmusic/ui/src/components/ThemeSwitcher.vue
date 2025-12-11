@@ -28,6 +28,11 @@
       <input type="range" min="12" max="18" step="1" v-model.number="local.lyricFontSize" @input="apply" />
     </div>
 
+    <div class="row">
+      <label>底栏歌词水平偏移 {{ local.tickerOffsetX }}px</label>
+      <input type="range" min="-400" max="400" step="1" v-model.number="local.tickerOffsetX" @input="apply" />
+    </div>
+
     <div class="actions">
       <button class="btn" @click="reset">重置</button>
       <button class="btn primary" @click="save">保存</button>
@@ -47,7 +52,7 @@ const props = defineProps({
 })
 
 const ui = useUiStore()
-const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate, lyricFontSize: ui.lyricFontSize })
+const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate, lyricFontSize: ui.lyricFontSize, tickerOffsetX: ui.tickerOffsetX })
 
 function apply(){
   ui.theme = local.theme
@@ -55,6 +60,7 @@ function apply(){
   ui.blur = local.blur
   ui.saturate = local.saturate
   ui.lyricFontSize = local.lyricFontSize
+  ui.tickerOffsetX = local.tickerOffsetX
   ui.applyTheme()
 }
 
@@ -68,6 +74,7 @@ function reset(){
   if(local.theme==='glass'){ local.alpha=0.36; local.blur=22; local.saturate=180 } 
   else { local.alpha=0.45; local.blur=18; local.saturate=160 }
   local.lyricFontSize = 14
+  local.tickerOffsetX = 0 // 重置底栏歌词水平偏移
   apply()
 }
 

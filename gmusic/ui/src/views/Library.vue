@@ -14,8 +14,8 @@
         </div>
         <!-- 右边：扫描面板 -->
         <div class="scan-wrapper">
-          <ScanPanel />
-        </div>
+      <ScanPanel />
+    </div>
       </div>
     </div>
 
