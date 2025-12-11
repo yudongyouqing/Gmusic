@@ -3,7 +3,7 @@
     @click="goNowPlaying" @touchstart.passive="onTouchStart" @touchmove.passive="onTouchMove">
     <div class="mini-bar__content">
       <!-- 封面缩略图 -->
-      <div class="cover">
+      <div class="cover" ref="coverRef" data-mini-cover>
         <img v-if="coverSrc" :src="coverSrc" alt="cover" @error="onCoverErr" />
         <div v-else class="cover__placeholder" aria-label="no cover">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -83,7 +83,14 @@
             @input="onVolumeChange" />
         </div>
       </div>
-    </div>
+        </div>
+    <!-- 过渡动画覆盖层 -->
+    <NowPlayingOverlay
+      v-if="showOverlay && coverSrc"
+      :startRect="overlayStartRect"
+      :coverSrc="coverSrc"
+      @done="onOverlayDone"
+    />
   </div>
 </template>
 
@@ -91,9 +98,14 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../stores/player'
+import NowPlayingOverlay from './NowPlayingOverlay.vue'
 
 const store = usePlayerStore()
 const router = useRouter()
+
+const coverRef = ref(null)
+const showOverlay = ref(false)
+const overlayStartRect = ref(null)
 
 const hadCoverErr = ref(false)
 const coverSrc = computed(() => {
@@ -160,7 +172,23 @@ function toggleMode() { store.setPlayMode(store.playMode === 'shuffle' ? 'loop' 
 const localVolume = ref(80)
 function onVolumeChange() { store.setVolumePercent(localVolume.value) }
 
-function goNowPlaying() { router.push('/now-playing') }
+function goNowPlaying() {
+  try{
+    const el = coverRef.value
+    if(el && coverSrc.value){
+      const rect = el.getBoundingClientRect()
+      overlayStartRect.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+      showOverlay.value = true
+      return
+    }
+  }catch(_){}
+  router.push('/now-playing')
+}
+
+function onOverlayDone(){
+  showOverlay.value = false
+  router.push('/now-playing')
+}
 
 const startY = ref(0)
 function onTouchStart(e) { startY.value = e.touches?.[0]?.clientY || 0 }
