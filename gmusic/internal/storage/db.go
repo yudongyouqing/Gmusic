@@ -34,8 +34,8 @@ type Song struct {
 // Playlist 表示一个播放列表，Songs 通过 many2many 中间表 playlist_songs 关联。
 // 建议：为中间表 (playlist_id, song_id) 添加唯一复合索引以避免重复加入同一歌曲。
 type Playlist struct {
-	ID    uint   `gorm:"primaryKey" json:"id"`          // 主键 ID
-	Name  string `json:"name"`                            // 播放列表名称
+	ID    uint   `gorm:"primaryKey" json:"id"`                   // 主键 ID
+	Name  string `json:"name"`                                   // 播放列表名称
 	Songs []Song `gorm:"many2many:playlist_songs;" json:"songs"` // 列表包含的歌曲，多对多关系（中间表 playlist_songs）
 }
 
@@ -44,8 +44,8 @@ type Playlist struct {
 // 可选：增加外键约束（SQLite 下外键默认关闭，需要 PRAGMA foreign_keys=ON）。
 type PlayHistory struct {
 	ID       uint  `gorm:"primaryKey" json:"id"` // 主键 ID
-	SongID   uint  `json:"song_id"`               // 被播放的歌曲 ID（外键）
-	PlayedAt int64 `json:"played_at"`             // 播放时间（Unix 时间戳，秒）
+	SongID   uint  `json:"song_id"`              // 被播放的歌曲 ID（外键）
+	PlayedAt int64 `json:"played_at"`            // 播放时间（Unix 时间戳，秒）
 }
 
 // InitDB 初始化数据库连接并进行自动迁移，返回 *gorm.DB。

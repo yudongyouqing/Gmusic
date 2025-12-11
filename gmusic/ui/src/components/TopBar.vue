@@ -43,7 +43,7 @@
           <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-      <button class="icon-btn" title="排序">
+      <button class="icon-btn" ref="sortBtnRef" title="排序" @click.stop="toggleSort">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path d="M8 6h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           <path d="M8 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -53,6 +53,26 @@
           <path d="M3 15l2 2 2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
+      <div v-if="showSort" class="sort-menu">
+        <div class="group">
+          <div class="title">标题</div>
+          <button @click="chooseSort('title','asc')">升序</button>
+          <button @click="chooseSort('title','desc')">降序</button>
+        </div>
+        <div class="group">
+          <div class="title">歌手</div>
+          <button @click="chooseSort('artist','asc')">升序</button>
+          <button @click="chooseSort('artist','desc')">降序</button>
+        </div>
+        <div class="group">
+          <div class="title">专辑</div>
+          <button @click="chooseSort('album','asc')">升序</button>
+          <button @click="chooseSort('album','desc')">降序</button>
+        </div>
+        <div class="group">
+          <button class="wide" @click="chooseSort('custom',store.sortDir)">自定义排序（拖拽）</button>
+        </div>
+      </div>
       <button class="icon-btn" title="搜索">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/>
@@ -116,6 +136,12 @@ const rightRef = ref(null)
 const themeBtnRef = ref(null)
 const themeBtnRect = ref(null)
 
+// 排序菜单
+const showSort = ref(false)
+const sortBtnRef = ref(null)
+function toggleSort(){ showSort.value = !showSort.value }
+function chooseSort(mode, dir){ store.setSort(mode, dir); showSort.value = false }
+
 function updateThemeRect(){
   const btn = themeBtnRef.value
   if(!btn) return
@@ -133,6 +159,10 @@ function onClickOutside(e){
   if(showTheme.value){
     const btn = themeBtnRef.value
     if(btn && !btn.contains(e.target)) showTheme.value = false
+  }
+  if(showSort.value){
+    const r = rightRef.value
+    if(r && !r.contains(e.target)) showSort.value = false
   }
 }
 
@@ -164,4 +194,12 @@ onBeforeUnmount(()=>{
 .icon-btn:hover, .chip:hover { background: rgba(255,255,255,0.9); }
 .chip .chip-inner { display:flex; align-items:center; gap:6px; }
 .chip svg { display:block; }
+
+/* 排序菜单 */
+.sort-menu { position: absolute; top: 44px; right: 0; background: var(--mica-surface); backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate)); -webkit-backdrop-filter: blur(var(--mica-blur)) saturate(var(--mica-saturate)); border:1px solid var(--mica-border); border-radius: 10px; padding: 8px; z-index: 4000; box-shadow: 0 10px 24px rgba(0,0,0,0.15); min-width: 220px; }
+.sort-menu .group { display:flex; align-items:center; gap:8px; padding: 4px 0; }
+.sort-menu .group .title { width: 42px; color:#666; font-size:12px; }
+.sort-menu .group button { padding:6px 8px; border-radius:8px; border:1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.8); cursor:pointer; font-size:12px; }
+.sort-menu .group button.wide { flex:1; text-align:center; }
+.sort-menu .group button:hover { background: rgba(255,255,255,0.95); }
 </style>

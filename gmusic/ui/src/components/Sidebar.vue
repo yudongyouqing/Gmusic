@@ -27,6 +27,16 @@
         </span>
         <span class="text">正在播放</span>
       </RouterLink>
+      <RouterLink to="/queue" class="nav-item" active-class="active">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M4 7h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="text">播放列表</span>
+      </RouterLink>
       <a class="nav-item disabled" title="占位">
         <span class="icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18">

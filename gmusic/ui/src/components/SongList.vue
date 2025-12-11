@@ -9,28 +9,56 @@
     </div>
 
     <div class="songs">
-      <SongRow
-        v-for="s in songs"
+      <div
+        v-for="(s, i) in songs"
         :key="s.id"
-        :song="s"
-        :active="currentSong && currentSong.id === s.id"
-        @select="() => onSelect(s)"
-      />
+        class="drag-wrap"
+        :draggable="isCustom && !isSearching && !disableDrag"
+        @dragstart="onDragStart(i)"
+        @dragover.prevent="onDragOver(i)"
+        @drop.prevent="onDrop(i)"
+      >
+        <SongRow
+          :song="s"
+          :active="currentSong && currentSong.id === s.id"
+          @select="() => onSelect(s)"
+        />
+      </div>
       <div v-if="!songs || songs.length === 0" class="empty">暂无歌曲</div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
+import { usePlayerStore } from '../stores/player'
 import SongRow from './SongRow.vue'
 
 const props = defineProps({
   songs: { type: Array, default: () => [] },
-  currentSong: Object
+  currentSong: Object,
+  disableDrag: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select'])
 function onSelect(song) { emit('select', song) }
+
+const store = usePlayerStore()
+const isCustom = computed(() => store.sortMode === 'custom')
+const isSearching = computed(() => !!store.searchResults)
+
+const dragFrom = ref(-1)
+function onDragStart(i){ dragFrom.value = i }
+function onDragOver(i){ /* 可在此添加视觉高亮 */ }
+function onDrop(i){
+  if (dragFrom.value < 0 || dragFrom.value === i) return
+  const ids = props.songs.map(s => s.id)
+  const [moved] = ids.splice(dragFrom.value, 1)
+  ids.splice(i, 0, moved)
+  store.setSort('custom', store.sortDir)
+  store.setCustomOrder(ids)
+  dragFrom.value = -1
+}
 </script>
 
 <style scoped>
@@ -60,6 +88,9 @@ function onSelect(song) { emit('select', song) }
   overflow-y: auto;
   padding-bottom: 6px;  /* 与底部条留出极小安全距离 */
 }
+
+.drag-wrap[draggable="true"]{ cursor: move; }
+.drag-wrap[draggable="true"]:active{ opacity: .85; }
 
 .empty { text-align: center; color: #999; padding: 40px 0; }
 </style>
