@@ -18,34 +18,34 @@ import (
 // - FilePath 建议在数据库层面设置唯一约束以避免重复导入（当前模型未强制）。
 // - 如需区分“未知值”和“明确为 0/空值”，可将部分字段改为指针或使用 sql.NullXxx。
 type Song struct {
-	ID       uint   `gorm:"primaryKey" json:"id"`
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	FilePath string `json:"file_path"`
-	Duration int    `json:"duration"` // 秒
-	BitRate  int    `json:"bit_rate"`
-	Format   string `json:"format"` // mp3, flac, wav
-	CoverURL string `json:"cover_url"`
-	TrackNum int    `json:"track_num"`
-	Year     int    `json:"year"`
+	ID       uint   `gorm:"primaryKey" json:"id"` // 主键 ID
+	Title    string `json:"title"`                // 歌曲标题
+	Artist   string `json:"artist"`               // 艺术家/歌手
+	Album    string `json:"album"`                // 专辑名
+	FilePath string `json:"file_path"`            // 音频文件的绝对/相对路径
+	Duration int    `json:"duration"`             // 时长（秒）
+	BitRate  int    `json:"bit_rate"`             // 比特率（kbps）
+	Format   string `json:"format"`               // 文件格式（如 mp3、flac、wav）
+	CoverURL string `json:"cover_url"`            // 封面图片路径或 URL
+	TrackNum int    `json:"track_num"`            // 专辑内的曲目序号
+	Year     int    `json:"year"`                 // 发行年份
 }
 
 // Playlist 表示一个播放列表，Songs 通过 many2many 中间表 playlist_songs 关联。
 // 建议：为中间表 (playlist_id, song_id) 添加唯一复合索引以避免重复加入同一歌曲。
 type Playlist struct {
-	ID    uint   `gorm:"primaryKey" json:"id"`
-	Name  string `json:"name"`
-	Songs []Song `gorm:"many2many:playlist_songs;" json:"songs"`
+	ID    uint   `gorm:"primaryKey" json:"id"`          // 主键 ID
+	Name  string `json:"name"`                            // 播放列表名称
+	Songs []Song `gorm:"many2many:playlist_songs;" json:"songs"` // 列表包含的歌曲，多对多关系（中间表 playlist_songs）
 }
 
 // PlayHistory 记录歌曲的播放历史。
 // 建议：为 SongID、PlayedAt 建索引，便于按歌曲/时间范围查询。
 // 可选：增加外键约束（SQLite 下外键默认关闭，需要 PRAGMA foreign_keys=ON）。
 type PlayHistory struct {
-	ID       uint  `gorm:"primaryKey" json:"id"`
-	SongID   uint  `json:"song_id"`
-	PlayedAt int64 `json:"played_at"` // Unix timestamp
+	ID       uint  `gorm:"primaryKey" json:"id"` // 主键 ID
+	SongID   uint  `json:"song_id"`               // 被播放的歌曲 ID（外键）
+	PlayedAt int64 `json:"played_at"`             // 播放时间（Unix 时间戳，秒）
 }
 
 // InitDB 初始化数据库连接并进行自动迁移，返回 *gorm.DB。
