@@ -15,6 +15,13 @@
         <div class="song-title" :title="title">{{ title }}</div>
         <div class="song-artist" :title="artist">{{ artist }}</div>
       </div>
+      <div class="header-spacer"></div>
+      <button class="gear-btn" @click="showLyricCtrl = !showLyricCtrl" title="歌词设置">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M3 12h3M18 12h3M12 3v3M12 18v3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M5.2 18.8l2.1-2.1M16.7 7.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
 
     <!-- 主体布局：左封面 + 右歌词/控制 -->
@@ -40,7 +47,7 @@
             v-if="hasLyrics"
             :lyrics="store.lyrics"
             :currentTime="store.playerStatus.position"
-            :anchorRatio="0.35"
+            :anchorRatio="lyricUi.anchor || 0.35" :baseFontSize="lyricUi.fontSize || 16" :blurOthers="lyricUi.blurOthers === true"
           />
           <div v-else class="no-lyrics">暂无歌词</div>
         </div>
@@ -99,10 +106,19 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../stores/player'
 import LyricDisplay from '../components/LyricDisplay.vue'
 import NowPlayingOverlay from '../components/NowPlayingOverlay.vue'
+import LyricControls from '../components/LyricControls.vue'
+import { useLyricUiStore } from '../stores/lyric'
 import { getLyrics } from '../api/music'
 
 const router = useRouter()
 const store = usePlayerStore()
+
+// 歌词页 UI 偏好（仅本页使用）
+const lyricUi = useLyricUiStore()
+lyricUi.load()
+
+// 控制面板开关
+const showLyricCtrl = ref(false)
 
 // 基本信息
 const title = computed(() => store.currentSong?.title || '未选择歌曲')

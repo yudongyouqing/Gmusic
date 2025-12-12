@@ -1,12 +1,12 @@
 <template>
   <div class="lyric-display" ref="containerRef">
-    <div class="lyric-list" :style="scrollStyle">
+    <div class="lyric-list" :style="[scrollStyle, rootStyle]">
       <div
         v-for="(line, idx) in lines"
         :key="idx"
         :ref="el => { if (el) lineRefs[idx] = el }"
         class="lyric-line"
-        :class="{ current: idx === currentLineIndex }"
+        :class="{ current: idx === currentLineIndex, blur: blurOthers && idx !== currentLineIndex }"
       >
         {{ line.text || '\u00A0' }}
       </div>
@@ -20,7 +20,9 @@ import { computed, ref, watch, onBeforeUpdate, nextTick, onMounted, onBeforeUnmo
 const props = defineProps({
   lyrics: { type: Object, default: null },
   currentTime: { type: Number, default: 0 }, // 秒
-  anchorRatio: { type: Number, default: 0.30 } // 当前行相对容器高度的锚点位置(0~1)，默认略高于中线
+  anchorRatio: { type: Number, default: 0.30 }, // 当前行相对容器高度的锚点位置(0~1)
+  baseFontSize: { type: Number, default: 16 }, // 基础字号(px)
+  blurOthers: { type: Boolean, default: false } // 模糊非当前行
 })
 
 const lines = computed(() => props.lyrics?.lines || [])
@@ -81,15 +83,15 @@ const lastTime = ref(0)
 watch(() => props.currentTime, (t)=>{ lastTime.value = t || 0; nextTick(() => ensureVisible()) })
 
 watch(currentLineIndex, (newIdx) => {
-  // 小步前进时才使用动画；大跳转/回退/初始化均无动画，避免“莫名一大段滑动”
+  // 向前推进就滚动；大跳转/回退/初始化无动画
   const delta = lastIdx.value >= 0 ? (newIdx - lastIdx.value) : 0
-  const animate = (delta === 1) && (props.currentTime >= lastTime.value)
+  const animate = (delta > 0) && (props.currentTime >= lastTime.value)
   lastIdx.value = newIdx
   nextTick(() => centerTo(newIdx, animate))
 })
 
 // 歌词整体刷新：无动画对齐
-watch(() => props.lyrics, () => nextTick(() => centerTo(currentLineIndex.value, false)))
+watch(() => props.lyrics, () => nextTick(() => { centerTo(currentLineIndex.value, false); ensureVisible() }))
 
 let ro = null
 onMounted(() => {
@@ -114,6 +116,10 @@ const scrollStyle = computed(() => ({
   transition: noAnim.value ? 'none' : 'transform 0.35s cubic-bezier(.2,.7,.2,1)',
   willChange: 'transform'
 }))
+
+const rootStyle = computed(() => ({
+  '--lyric-base-size': props.baseFontSize + 'px'
+}))
 </script>
 
 <style scoped>
@@ -124,10 +130,11 @@ const scrollStyle = computed(() => ({
   padding: 12px 10px;
   text-align: center;
   color: #666;
-  font-size: 16px;
+  font-size: var(--lyric-base-size, 16px);
   line-height: 1.6;
-  transition: color .25s ease, font-size .25s ease, transform .25s ease;
+  transition: color .25s ease, font-size .25s ease, transform .25s ease, filter .25s ease, opacity .25s ease;
 }
 
-.lyric-line.current { color: #222; font-weight: 600; font-size: 18px; transform: translateZ(0) scale(1.02); }
+.lyric-line.current { color: #222; font-weight: 600; font-size: calc(var(--lyric-base-size, 16px) + 2px); transform: translateZ(0) scale(1.02); }
+.lyric-line.blur { filter: blur(1px); opacity: .6; }
 </style>
