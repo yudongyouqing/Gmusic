@@ -52,7 +52,7 @@ const props = defineProps({
 })
 
 const ui = useUiStore()
-const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate, lyricFontSize: ui.lyricFontSize, tickerOffsetX: ui.tickerOffsetX })
+const local = reactive({ theme: ui.theme, alpha: ui.alpha, blur: ui.blur, saturate: ui.saturate, lyricFontSize: ui.lyricFontSize, tickerOffsetX: ui.tickerOffsetX, lyricAnchor: ui.lyricAnchor ?? 0.35 })
 
 function apply(){
   ui.theme = local.theme
@@ -61,6 +61,7 @@ function apply(){
   ui.saturate = local.saturate
   ui.lyricFontSize = local.lyricFontSize
   ui.tickerOffsetX = local.tickerOffsetX
+  ui.lyricAnchor = local.lyricAnchor
   ui.applyTheme()
 }
 

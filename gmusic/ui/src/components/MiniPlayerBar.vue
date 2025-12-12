@@ -84,13 +84,7 @@
         </div>
       </div>
     </div>
-    <!-- 过渡动画覆盖层 -->
-    <NowPlayingOverlay
-      v-if="showOverlay && coverSrc"
-      :startRect="overlayStartRect"
-      :coverSrc="coverSrc"
-      @done="onOverlayDone"
-    />
+
   </div>
 </template>
 
@@ -172,22 +166,27 @@ function toggleMode() { store.setPlayMode(store.playMode === 'shuffle' ? 'loop' 
 const localVolume = ref(80)
 function onVolumeChange() { store.setVolumePercent(localVolume.value) }
 
-function goNowPlaying() {
+async function goNowPlaying() {
+  let rect = null
   try{
     const el = coverRef.value
     if(el && coverSrc.value){
-      const rect = el.getBoundingClientRect()
-      overlayStartRect.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
-      showOverlay.value = true
-      return
+      const r = el.getBoundingClientRect()
+      rect = { left: r.left, top: r.top, width: r.width, height: r.height }
     }
-  }catch(_){}
-  router.push('/now-playing')
+  }catch(_){ }
+  // 先切路由，再在顶层做 240ms 封面动画，实现无缝衔接
+  await router.push('/now-playing')
+  if(rect && coverSrc.value){
+    overlayStartRect.value = rect
+    showOverlay.value = true
+    setTimeout(() => { showOverlay.value = false }, 320)
+  }
 }
 
 function onOverlayDone(){
+  // 仅关闭覆盖层，避免二次路由造成的割裂感
   showOverlay.value = false
-  router.push('/now-playing')
 }
 
 const startY = ref(0)

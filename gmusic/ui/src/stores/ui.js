@@ -7,7 +7,10 @@ export const useUiStore = defineStore('ui', {
     blur: 18,         // 模糊 px
     saturate: 160,    // 饱和 %
     lyricFontSize: 14, // 歌词字号 px
+    lyricAnchor: 0.35, // 歌词锚点（0~1，越小越靠上）
     tickerOffsetX: 0,  // 底栏歌词水平偏移(px，负为左移，正为右移)
+    overlayRect: null,
+    overlayCover: ''
   }),
   actions: {
     applyTheme() {
@@ -22,6 +25,7 @@ export const useUiStore = defineStore('ui', {
       const sat = `${p.saturate}%`
       const lfs = `${this.lyricFontSize}px`
       const toX = `${this.tickerOffsetX}px`
+      const anchor = `${this.lyricAnchor}`
 
       const root = document.documentElement
       root.style.setProperty('--mica-surface', surface)
@@ -30,10 +34,19 @@ export const useUiStore = defineStore('ui', {
       root.style.setProperty('--mica-saturate', sat)
       root.style.setProperty('--lyric-font-size', lfs)
       root.style.setProperty('--mini-ticker-offset', toX)
+      root.style.setProperty('--lyric-anchor', anchor)
       root.style.setProperty('--mica-border', `rgba(255,255,255,${Math.max(0.25, p.alpha - 0.1)})`)
     },
     saveTheme() {
-      const data = { theme: this.theme, alpha: this.alpha, blur: this.blur, saturate: this.saturate, lyricFontSize: this.lyricFontSize, tickerOffsetX: this.tickerOffsetX }
+      const data = {
+        theme: this.theme,
+        alpha: this.alpha,
+        blur: this.blur,
+        saturate: this.saturate,
+        lyricFontSize: this.lyricFontSize,
+        lyricAnchor: this.lyricAnchor,
+        tickerOffsetX: this.tickerOffsetX
+      }
       localStorage.setItem('gmusic:theme', JSON.stringify(data))
     },
     loadTheme() {
@@ -47,6 +60,7 @@ export const useUiStore = defineStore('ui', {
             this.blur = typeof data.blur === 'number' ? data.blur : this.blur
             this.saturate = typeof data.saturate === 'number' ? data.saturate : this.saturate
             this.lyricFontSize = typeof data.lyricFontSize === 'number' ? data.lyricFontSize : this.lyricFontSize
+            this.lyricAnchor = typeof data.lyricAnchor === 'number' ? data.lyricAnchor : this.lyricAnchor
             this.tickerOffsetX = typeof data.tickerOffsetX === 'number' ? data.tickerOffsetX : this.tickerOffsetX
           }
         }
