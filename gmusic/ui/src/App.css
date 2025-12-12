@@ -14,6 +14,7 @@
   --mica-saturate: 160%;
   --bottom-bar-height: 72px;
   --lyric-font-size: 14px;
+  --sidebar-width: 220px; /* 供返回按钮等元素避让侧边栏 */
 }
 
 body {

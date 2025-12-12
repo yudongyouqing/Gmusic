@@ -18,11 +18,11 @@
         @dragover.prevent="onDragOver(i)"
         @drop.prevent="onDrop(i)"
       >
-        <SongRow
-          :song="s"
-          :active="currentSong && currentSong.id === s.id"
-          @select="() => onSelect(s)"
-        />
+      <SongRow
+        :song="s"
+        :active="currentSong && currentSong.id === s.id"
+        @select="() => onSelect(s)"
+      />
       </div>
       <div v-if="!songs || songs.length === 0" class="empty">暂无歌曲</div>
     </div>

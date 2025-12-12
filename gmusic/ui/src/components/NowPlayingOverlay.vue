@@ -25,6 +25,7 @@ const emit = defineEmits(['done'])
 
 const visible = ref(true)
 const started = ref(false)
+let finished = false
 
 const coverStyle = ref({})
 
@@ -59,11 +60,11 @@ onMounted(async () => {
   started.value = true
 })
 
-function onCoverEnd(e){
-  if (e.propertyName === 'left' || e.propertyName === 'transform' || e.propertyName === 'width') {
-    emit('done')
-    visible.value = false
-  }
+function onCoverEnd(){
+  if (finished) return
+  finished = true
+  emit('done')
+  visible.value = false
 }
 </script>
 

@@ -83,7 +83,7 @@
             @input="onVolumeChange" />
         </div>
       </div>
-        </div>
+    </div>
     <!-- 过渡动画覆盖层 -->
     <NowPlayingOverlay
       v-if="showOverlay && coverSrc"
