@@ -1,6 +1,7 @@
 <template>
-  <div class="lyric-display" ref="containerRef">
-    <div class="lyric-list" :style="[scrollStyle, rootStyle]">
+  <div class="lyric-display">
+    <!-- 原生滚动容器，通过 CSS pointer-events 控制是否可滚动 -->
+    <div ref="scrollRef" class="ld-scroll" :class="{ 'is-locked': isPlaying }">
       <div
         v-for="(line, idx) in lines"
         :key="idx"
@@ -15,126 +16,111 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUpdate, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   lyrics: { type: Object, default: null },
-  currentTime: { type: Number, default: 0 }, // 秒
-  anchorRatio: { type: Number, default: 0.30 }, // 当前行相对容器高度的锚点位置(0~1)
-  baseFontSize: { type: Number, default: 16 }, // 基础字号(px)
-  blurOthers: { type: Boolean, default: false } // 模糊非当前行
+  currentTime: { type: Number, default: 0 },
+  baseFontSize: { type: Number, default: 16 },
+  blurOthers: { type: Boolean, default: false },
+  isPlaying: { type: Boolean, default: false }
 })
 
 const lines = computed(() => props.lyrics?.lines || [])
+
 const currentLineIndex = computed(() => {
   const ctMs = Math.floor((props.currentTime || 0) * 1000)
-  // 先找到时间上“应该到达的行”
   let raw = -1
-  for (let i = 0; i < lines.value.length; i++) {
-    if (lines.value[i].time <= ctMs) raw = i
+  const arr = lines.value
+  for (let i = 0; i < arr.length; i++) {
+    if ((arr[i]?.time || 0) <= ctMs) raw = i
     else break
   }
   if (raw < 0) return 0
-  // 再向前回退到最近一条非空歌词，实现“无缝链接”
   let j = raw
-  while (j > 0 && !(lines.value[j]?.text || '').trim()) j--
+  while (j > 0 && !((arr[j]?.text || '').trim())) j--
   return j
 })
 
-const containerRef = ref(null)
+const scrollRef = ref(null)
 const lineRefs = ref([])
-const scrollY = ref(0)
-const noAnim = ref(true) // 尺寸变化/初始对齐时不做动画，避免“莫名滑动”
 
-// 在 DOM 更新前清空 refs
-onBeforeUpdate(() => { lineRefs.value = [] })
+function scrollToCurrent(animate = true) {
+  const el = scrollRef.value
+  const row = lineRefs.value[currentLineIndex.value]
+  if (!el || !row) return
 
-function centerTo(idx, animate){
-  const container = containerRef.value
-  const activeLine = lineRefs.value[idx]
-  if (!container || !activeLine) return
-  const containerHeight = container.clientHeight
-  const lineTop = activeLine.offsetTop
-  const lineHeight = activeLine.offsetHeight
-  const anchor = Math.min(0.9, Math.max(0.1, props.anchorRatio ?? 0.35))
-  // 让当前行“中线”对齐到容器的 anchor 比例位置（默认 35% 稍偏上）
-  const targetY = containerHeight * anchor
-  let offset = targetY - lineTop - lineHeight / 2
+  const targetScrollTop = row.offsetTop - (el.clientHeight / 2 - row.offsetHeight / 2)
 
-  // 边界钳制：不允许第一行被推到视野上方或最后一行被推到下方
-  const first = lineRefs.value[0]
-  const last = lineRefs.value[lineRefs.value.length - 1]
-  const padTop = 8, padBottom = 8
-  if (first && last) {
-    const minOffset = padTop - first.offsetTop // 使第一行顶到 padTop
-    const maxOffset = (containerHeight - padBottom) - (last.offsetTop + last.offsetHeight) // 使最后一行底到容器底部上方 padBottom
-    // 注意：minOffset 通常是正值（往下推），maxOffset 通常是负值（往上拉）。
-    // 我们希望 offset 处于 [maxOffset, minOffset] 区间内。
-    offset = Math.max(maxOffset, Math.min(minOffset, offset))
+  if (Math.abs(targetScrollTop - el.scrollTop) < 1) return
+
+  if (animate) {
+    el.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+  } else {
+    el.scrollTop = targetScrollTop
   }
-
-  noAnim.value = !animate
-  scrollY.value = offset
 }
 
-const lastIdx = ref(-1)
-const lastTime = ref(0)
-
-watch(() => props.currentTime, (t)=>{ lastTime.value = t || 0; nextTick(() => ensureVisible()) })
-
-watch(currentLineIndex, (newIdx) => {
-  // 向前推进就滚动；大跳转/回退/初始化无动画
-  const delta = lastIdx.value >= 0 ? (newIdx - lastIdx.value) : 0
-  const animate = (delta > 0) && (props.currentTime >= lastTime.value)
-  lastIdx.value = newIdx
-  nextTick(() => centerTo(newIdx, animate))
+// 核心逻辑：只要行号变化，就滚动到当前行
+watch(currentLineIndex, () => {
+  // 仅当播放时才自动滚动
+  if (props.isPlaying) {
+    nextTick(() => scrollToCurrent(true))
+  }
 })
 
-// 歌词整体刷新：无动画对齐
-watch(() => props.lyrics, () => nextTick(() => { centerTo(currentLineIndex.value, false); ensureVisible() }))
+// 播放状态变化：暂停时可滚动，播放时立即跳回并锁定
+watch(() => props.isPlaying, (playing) => {
+  if (playing) {
+    nextTick(() => scrollToCurrent(false))
+  }
+})
+
+// 初始化与尺寸变化时，无动画对齐
+function initialAlign() {
+  nextTick(() => scrollToCurrent(false))
+}
 
 let ro = null
 onMounted(() => {
-  nextTick(() => centerTo(currentLineIndex.value, false))
-  // 监听容器尺寸变化：无动画居中，避免字体/布局变化导致“慢慢下滑”
+  initialAlign()
   if (window.ResizeObserver) {
-    ro = new ResizeObserver(() => centerTo(currentLineIndex.value, false))
-    if (containerRef.value) ro.observe(containerRef.value)
+    ro = new ResizeObserver(initialAlign)
+    if (scrollRef.value) ro.observe(scrollRef.value)
   } else {
-    window.addEventListener('resize', onResize, { passive: true })
+    window.addEventListener('resize', initialAlign, { passive: true })
   }
 })
-function onResize(){ centerTo(currentLineIndex.value, false) }
 
 onBeforeUnmount(() => {
-  if (ro) { try{ ro.disconnect() }catch(_){} ro = null }
-  window.removeEventListener('resize', onResize)
+  if (ro) { try { ro.disconnect() } catch {} ro = null }
+  window.removeEventListener('resize', initialAlign)
 })
-
-const scrollStyle = computed(() => ({
-  transform: `translateY(${scrollY.value}px)`,
-  transition: noAnim.value ? 'none' : 'transform 0.35s cubic-bezier(.2,.7,.2,1)',
-  willChange: 'transform'
-}))
-
-const rootStyle = computed(() => ({
-  '--lyric-base-size': props.baseFontSize + 'px'
-}))
 </script>
 
 <style scoped>
-.lyric-display { height: 100%; overflow: hidden; position: relative; }
-.lyric-list { width: 100%; }
+.lyric-display { position: relative; height: 100%; overflow: hidden; }
+.ld-scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 8px; /* 左右留白，上下不留白以精确居中 */
+  scroll-behavior: smooth;
+}
+
+/* 播放时锁定滚动，用户无法手动操作 */
+.ld-scroll.is-locked {
+  pointer-events: none;
+}
 
 .lyric-line {
   padding: 12px 10px;
   text-align: center;
-  color: #666;
-  font-size: var(--lyric-base-size, 16px);
-  line-height: 1.6;
-  transition: color .25s ease, font-size .25s ease, transform .25s ease, filter .25s ease, opacity .25s ease;
+  color:#666;
+  font-size: var(--lyric-base-size,16px);
+  line-height:1.6;
+  transition: color .25s ease, font-size .25s ease, filter .25s ease, opacity .25s ease;
 }
-
-.lyric-line.current { color: #222; font-weight: 600; font-size: calc(var(--lyric-base-size, 16px) + 2px); transform: translateZ(0) scale(1.02); }
+.lyric-line.current { color:#222; font-weight:600; font-size: calc(var(--lyric-base-size,16px) + 2px); }
 .lyric-line.blur { filter: blur(1px); opacity: .6; }
 </style>

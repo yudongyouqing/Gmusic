@@ -8,7 +8,8 @@
     <div class="header">
       <button class="back-btn" @click="onBack" title="返回">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"
+            stroke-linejoin="round" />
         </svg>
       </button>
       <div class="titlebar">
@@ -18,11 +19,15 @@
       <div class="header-spacer"></div>
       <button class="gear-btn" @click="showLyricCtrl = !showLyricCtrl" title="歌词设置">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z" fill="none" stroke="currentColor" stroke-width="2"/>
-          <path d="M3 12h3M18 12h3M12 3v3M12 18v3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M5.2 18.8l2.1-2.1M16.7 7.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M3 12h3M18 12h3M12 3v3M12 18v3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M5.2 18.8l2.1-2.1M16.7 7.3l2.1-2.1"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
       </button>
     </div>
+
+    <!-- 歌词设置面板（齿轮） -->
+    <LyricControls v-if="showLyricCtrl" :right="16" :top="56" @close="showLyricCtrl = false" />
 
     <!-- 主体布局：左封面 + 右歌词/控制 -->
     <div class="content">
@@ -32,7 +37,7 @@
           <img v-if="coverSrc" :src="coverSrc" alt="cover" @error="onCoverErr" />
           <div v-else class="cover-placeholder" aria-label="no cover">
             <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-              <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor"/>
+              <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor" />
             </svg>
           </div>
         </div>
@@ -47,7 +52,9 @@
             v-if="hasLyrics"
             :lyrics="store.lyrics"
             :currentTime="store.playerStatus.position"
-            :anchorRatio="lyricUi.anchor || 0.35" :baseFontSize="lyricUi.fontSize || 16" :blurOthers="lyricUi.blurOthers === true"
+            :baseFontSize="lyricUi.fontSize || 16"
+            :blurOthers="lyricUi.blurOthers === true"
+            :isPlaying="store.isPlaying"
           />
           <div v-else class="no-lyrics">暂无歌词</div>
         </div>
@@ -89,14 +96,8 @@
     </div>
 
     <!-- 缩回到底栏的过渡层（在同页内统一管理） -->
-    <NowPlayingOverlay
-      v-if="showOverlay && coverSrc"
-      :startRect="overlayStartRect"
-      :targetRect="overlayTargetRect"
-      :coverSrc="coverSrc"
-      mode="collapse"
-      @done="onOverlayDone"
-    />
+    <NowPlayingOverlay v-if="showOverlay && coverSrc" :startRect="overlayStartRect" :targetRect="overlayTargetRect"
+      :coverSrc="coverSrc" mode="collapse" @done="onOverlayDone" />
   </div>
 </template>
 
@@ -131,7 +132,7 @@ const coverSrc = computed(() => {
   if (!s || hadCoverErr.value) return ''
   return s.id ? `http://localhost:8080/api/cover/${s.id}` : (s.cover_url || '')
 })
-function onCoverErr(){ hadCoverErr.value = true }
+function onCoverErr() { hadCoverErr.value = true }
 
 // 背景：封面模糊/饱和
 const bgStyle = computed(() => ({
@@ -148,27 +149,27 @@ const hasLyrics = computed(() => {
 const localPos = ref(0)
 const dragging = ref(false)
 watch(() => store.playerStatus.position, v => { if (!dragging.value) localPos.value = Math.floor(v || 0) })
-function onSeekInput(e){ dragging.value = true; localPos.value = Number(e.target.value || 0) }
-async function onSeekCommit(e){ const val = Number(e.target.value || 0); await store.seekTo(val); dragging.value = false }
+function onSeekInput(e) { dragging.value = true; localPos.value = Number(e.target.value || 0) }
+async function onSeekCommit(e) { const val = Number(e.target.value || 0); await store.seekTo(val); dragging.value = false }
 const canJump = computed(() => (store.songList()?.length || 0) > 0)
 
 // 兜底拉取歌词
-async function ensureLyrics(){
-  try{
-    if(!store.currentSong) return
+async function ensureLyrics() {
+  try {
+    if (!store.currentSong) return
     const need = !store.lyrics || !Array.isArray(store.lyrics?.lines) || store.lyrics.lines.length === 0
-    if(need){
+    if (need) {
       const { data } = await getLyrics(store.currentSong.id)
-      if(data) store.lyrics = data
+      if (data) store.lyrics = data
     }
-  }catch(_){ /* ignore */ }
+  } catch (_) { /* ignore */ }
 }
 
 // 轮询状态
 let timer = null
-function setupPoll(){
+function setupPoll() {
   clearInterval(timer)
-  if (store.isPlaying) timer = setInterval(() => store.refreshStatus().catch(() => {}), 600)
+  if (store.isPlaying) timer = setInterval(() => store.refreshStatus().catch(() => { }), 600)
 }
 watch(() => store.isPlaying, setupPoll)
 watch(() => store.currentSong?.id, async () => { hadCoverErr.value = false; setupPoll(); await ensureLyrics() })
@@ -181,12 +182,12 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('keydown', onEsc) })
 
-function onEsc(e){ if(e.key === 'Escape') onBack() }
+function onEsc(e) { if (e.key === 'Escape') onBack() }
 
-function formatTime(seconds){
+function formatTime(seconds) {
   const s = Math.max(0, Math.floor(seconds || 0))
   const mins = Math.floor(s / 60); const secs = s % 60
-  return `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
 // 缩回到底栏动画
@@ -195,65 +196,244 @@ const showOverlay = ref(false)
 const overlayStartRect = ref(null)
 const overlayTargetRect = ref(null)
 
-async function onBack(){
-  try{
+async function onBack() {
+  try {
     await nextTick()
     const srcEl = coverMainRef.value
     const dstEl = document.querySelector('[data-mini-cover]')
-    if(srcEl && dstEl && coverSrc.value){
+    if (srcEl && dstEl && coverSrc.value) {
       const r1 = srcEl.getBoundingClientRect(); const r2 = dstEl.getBoundingClientRect()
-      overlayStartRect.value = { left:r1.left, top:r1.top, width:r1.width, height:r1.height }
-      overlayTargetRect.value = { left:r2.left, top:r2.top, width:r2.width, height:r2.height }
+      overlayStartRect.value = { left: r1.left, top: r1.top, width: r1.width, height: r1.height }
+      overlayTargetRect.value = { left: r2.left, top: r2.top, width: r2.width, height: r2.height }
       showOverlay.value = true
       return
     }
-  }catch(_){ }
+  } catch (_) { }
   router.back()
 }
-function onOverlayDone(){ showOverlay.value = false; router.back() }
+function onOverlayDone() { showOverlay.value = false; router.back() }
 </script>
 
 <style scoped>
 /* 顶层全屏盖层：阻止穿透点击 */
-.np-overlay{ position: fixed; inset: 0; z-index: 10000; width:100%; height:100%; min-height:0; overflow:hidden; }
+.np-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
 
 /* 背景不拦截点击（pointer-events:none） */
-.bg{ position:absolute; inset:0; background-position:center; background-size:cover; filter: blur(22px) saturate(160%); transform: scale(1.06); opacity:.95; z-index:0; pointer-events:none; }
+.bg {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  filter: blur(22px) saturate(160%);
+  transform: scale(1.06);
+  opacity: .95;
+  z-index: 0;
+  pointer-events: none;
+}
 
 /* 顶部栏：返回 + 标题 */
-.header{ position: absolute; left: 16px; right: 16px; top: 12px; z-index: 2; display:flex; align-items:center; gap: 12px; }
-.back-btn{ width: 40px; height: 40px; border-radius: 10px; border:1px solid rgba(0,0,0,0.06); background: rgba(255,255,255,0.96); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
-.back-btn:hover{ background:#fff; }
-.titlebar{ display:flex; flex-direction:column; gap:4px; background: rgba(255,255,255,0.6); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); }
-.song-title{ font-weight:700; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 52vw; }
-.song-artist{ font-size:12px; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 52vw; }
+.header {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.back-btn:hover {
+  background: #fff;
+}
+
+.titlebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.song-title {
+  font-weight: 700;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52vw;
+}
+
+.song-artist {
+  font-size: 12px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52vw;
+}
 
 /* 主内容区域 */
-.content{ position: relative; z-index:1; display:grid; grid-template-columns: 420px 1fr; gap: 18px; height:100%; padding: 72px 24px 16px; box-sizing: border-box; }
+.content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 18px;
+  height: 100%;
+  padding: 72px 24px 16px;
+  box-sizing: border-box;
+}
 
 /* 左侧封面 */
-.left{ display:flex; flex-direction:column; align-items:center; }
-.cover-wrap{ width: 100%; max-width: 520px; aspect-ratio: 1; border-radius: 12px; background: rgba(0,0,0,0.08); overflow:hidden; display:flex; align-items:center; justify-content:center; box-shadow: 0 20px 50px rgba(0,0,0,0.18); }
-.cover-wrap img{ width:100%; height:100%; object-fit:cover; display:block; }
-.cover-placeholder{ font-size:48px; opacity:.8; }
-.cover-reflect{ width:100%; max-width:520px; height:64px; overflow:hidden; border-radius: 0 0 12px 12px; mask-image: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,0)); -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,0)); }
-.cover-reflect img{ width:100%; height:128px; object-fit:cover; transform: scaleY(-1); opacity:.35; filter: blur(2px); transform-origin: top; }
+.left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cover-wrap {
+  width: 100%;
+  max-width: 520px;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.cover-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-placeholder {
+  font-size: 48px;
+  opacity: .8;
+}
+
+.cover-reflect {
+  width: 100%;
+  max-width: 520px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .35), rgba(0, 0, 0, 0));
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .35), rgba(0, 0, 0, 0));
+}
+
+.cover-reflect img {
+  width: 100%;
+  height: 128px;
+  object-fit: cover;
+  transform: scaleY(-1);
+  opacity: .35;
+  filter: blur(2px);
+  transform-origin: top;
+}
 
 /* 右侧歌词与控制 */
-.right{ display:flex; flex-direction:column; min-width:0; }
-.lyric-wrap{ flex:1; min-height:0; overflow:hidden; background: rgba(255,255,255,0.55); border:1px solid rgba(0,0,0,0.06); border-radius: 12px; backdrop-filter: blur(10px) saturate(160%); -webkit-backdrop-filter: blur(10px) saturate(160%); }
-.no-lyrics{ height:100%; display:flex; align-items:center; justify-content:center; color:#666; }
+.right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 
-.seek{ display:grid; grid-template-columns: 56px 1fr 56px; gap:10px; align-items:center; margin-top: 10px; }
-.time{ color:#555; font-variant-numeric: tabular-nums; text-align:center; }
-.seek-bar{ width:100%; accent-color:#667eea; }
+.lyric-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+}
 
-.controls{ display:flex; gap:10px; justify-content:center; padding-top: 10px; }
-.ctrl{ width:44px; height:44px; border-radius:10px; border:1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.8); cursor:pointer; }
-.ctrl:hover{ background: rgba(255,255,255,0.95); }
+.no-lyrics {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
 
-@media (max-width: 980px){
-  .content{ grid-template-columns: 1fr; padding-top: 68px; }
-  .left .cover-wrap, .left .cover-reflect{ max-width: 82vw; }
+.seek {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.time {
+  color: #555;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.seek-bar {
+  width: 100%;
+  accent-color: #667eea;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.ctrl {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.ctrl:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+@media (max-width: 980px) {
+  .content {
+    grid-template-columns: 1fr;
+    padding-top: 68px;
+  }
+
+  .left .cover-wrap,
+  .left .cover-reflect {
+    max-width: 82vw;
+  }
 }
 </style>

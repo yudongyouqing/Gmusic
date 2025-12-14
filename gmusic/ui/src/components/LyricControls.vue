@@ -23,6 +23,14 @@
       </label>
     </div>
 
+    <div class="row toggle">
+      <label>显示锚点引导线</label>
+      <label class="switch">
+        <input type="checkbox" v-model="local.showGuide" @change="apply" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
     <div class="actions">
       <button class="btn" @click="reset">重置</button>
       <button class="btn primary" @click="save">保存</button>
@@ -52,7 +60,7 @@ function apply(){
 function save(){ store.save(); emit('close') }
 function reset(){ local.anchor = 0.35; local.fontSize = 16; local.blurOthers = false; apply() }
 
-const posStyle = computed(()=>({ position:'absolute', right: props.right+'px', top: props.top+'px', zIndex: 5 }))
+const posStyle = computed(()=>({ position:'fixed', right: props.right+'px', top: props.top+'px', zIndex: 12000 }))
 </script>
 
 <style scoped>
