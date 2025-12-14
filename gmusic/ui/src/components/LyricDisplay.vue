@@ -1,16 +1,18 @@
 <template>
   <div class="lyric-display">
-    <!-- 原生滚动容器，通过 CSS pointer-events 控制是否可滚动 -->
     <div ref="scrollRef" class="ld-scroll" :class="{ 'is-locked': isPlaying }">
+      <!-- 虚拟滚动：仅渲染可视区域附近的歌词行 -->
+      <div class="scroll-spacer" :style="{ height: `${topPadding}px` }"></div>
       <div
-        v-for="(line, idx) in lines"
-        :key="idx"
-        :ref="el => { if (el) lineRefs[idx] = el }"
+        v-for="line in visibleLines"
+        :key="line.idx"
+        :ref="el => { if (el) lineRefs[line.idx] = el }"
         class="lyric-line"
-        :class="{ current: idx === currentLineIndex, blur: blurOthers && idx !== currentLineIndex }"
+        :class="{ current: line.idx === currentLineIndex, blur: blurOthers && line.idx !== currentLineIndex }"
       >
         {{ line.text || '\u00A0' }}
       </div>
+      <div class="scroll-spacer" :style="{ height: `${bottomPadding}px` }"></div>
     </div>
   </div>
 </template>
@@ -26,31 +28,66 @@ const props = defineProps({
   isPlaying: { type: Boolean, default: false }
 })
 
-const lines = computed(() => props.lyrics?.lines || [])
+const allLines = computed(() => props.lyrics?.lines || [])
 
 const currentLineIndex = computed(() => {
   const ctMs = Math.floor((props.currentTime || 0) * 1000)
   let raw = -1
-  const arr = lines.value
-  for (let i = 0; i < arr.length; i++) {
-    if ((arr[i]?.time || 0) <= ctMs) raw = i
+  for (let i = 0; i < allLines.value.length; i++) {
+    if ((allLines.value[i]?.time || 0) <= ctMs) raw = i
     else break
   }
   if (raw < 0) return 0
   let j = raw
-  while (j > 0 && !((arr[j]?.text || '').trim())) j--
+  while (j > 0 && !((allLines.value[j]?.text || '').trim())) j--
   return j
 })
 
 const scrollRef = ref(null)
 const lineRefs = ref([])
 
+// --- 虚拟滚动核心 ---
+const visibleRange = ref({ start: 0, end: 20 })
+const topPadding = ref(0)
+const bottomPadding = ref(0)
+const averageLineHeight = ref(38) // 预估行高
+
+const visibleLines = computed(() => {
+  return allLines.value.slice(visibleRange.value.start, visibleRange.value.end).map((line, i) => ({
+    ...line,
+    idx: visibleRange.value.start + i
+  }))
+})
+
+function updateVisibleRange() {
+  const el = scrollRef.value
+  if (!el) return
+
+  const buffer = 10 // 上下多渲染10行
+  const scrollTop = el.scrollTop
+  const clientHeight = el.clientHeight
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / averageLineHeight.value) - buffer)
+  const endIndex = Math.min(allLines.value.length, Math.ceil((scrollTop + clientHeight) / averageLineHeight.value) + buffer)
+
+  visibleRange.value = { start: startIndex, end: endIndex }
+  topPadding.value = startIndex * averageLineHeight.value
+  bottomPadding.value = (allLines.value.length - endIndex) * averageLineHeight.value
+}
+
+function onScroll() {
+  if (!props.isPlaying) {
+    updateVisibleRange()
+  }
+}
+// --- 虚拟滚动结束 ---
+
 function scrollToCurrent(animate = true) {
   const el = scrollRef.value
-  const row = lineRefs.value[currentLineIndex.value]
-  if (!el || !row) return
+  if (!el) return
 
-  const targetScrollTop = row.offsetTop - (el.clientHeight / 2 - row.offsetHeight / 2)
+  const targetIndex = currentLineIndex.value
+  const targetScrollTop = targetIndex * averageLineHeight.value - (el.clientHeight / 2 - averageLineHeight.value / 2)
 
   if (Math.abs(targetScrollTop - el.scrollTop) < 1) return
 
@@ -59,30 +96,32 @@ function scrollToCurrent(animate = true) {
   } else {
     el.scrollTop = targetScrollTop
   }
+  // 滚动后立即更新可视范围
+  nextTick(updateVisibleRange)
 }
 
-// 核心逻辑：只要行号变化，就滚动到当前行
 watch(currentLineIndex, () => {
-  // 仅当播放时才自动滚动
   if (props.isPlaying) {
-    nextTick(() => scrollToCurrent(true))
+    scrollToCurrent(true)
   }
 })
 
-// 播放状态变化：暂停时可滚动，播放时立即跳回并锁定
 watch(() => props.isPlaying, (playing) => {
   if (playing) {
-    nextTick(() => scrollToCurrent(false))
+    scrollToCurrent(false)
   }
 })
 
-// 初始化与尺寸变化时，无动画对齐
 function initialAlign() {
-  nextTick(() => scrollToCurrent(false))
+  nextTick(() => {
+    updateVisibleRange()
+    scrollToCurrent(false)
+  })
 }
 
 let ro = null
 onMounted(() => {
+  scrollRef.value?.addEventListener('scroll', onScroll)
   initialAlign()
   if (window.ResizeObserver) {
     ro = new ResizeObserver(initialAlign)
@@ -93,18 +132,19 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  scrollRef.value?.removeEventListener('scroll', onScroll)
   if (ro) { try { ro.disconnect() } catch {} ro = null }
   window.removeEventListener('resize', initialAlign)
 })
+
 </script>
 
 <style scoped>
-.lyric-display { position: relative; height: 100%; overflow: hidden; }
+.lyric-display { position: relative; height: 100%; }
 .ld-scroll {
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 8px; /* 左右留白，上下不留白以精确居中 */
   scroll-behavior: smooth;
 }
 
@@ -114,13 +154,13 @@ onBeforeUnmount(() => {
 }
 
 .lyric-line {
-  padding: 12px 10px;
+  padding: 10px;
   text-align: center;
   color:#666;
-  font-size: var(--lyric-base-size,16px);
+  font-size: var(--lyric-base-size, 16px);
   line-height:1.6;
   transition: color .25s ease, font-size .25s ease, filter .25s ease, opacity .25s ease;
 }
-.lyric-line.current { color:#222; font-weight:600; font-size: calc(var(--lyric-base-size,16px) + 2px); }
+.lyric-line.current { color:#222; font-weight:600; font-size: calc(var(--lyric-base-size, 16px) + 2px); }
 .lyric-line.blur { filter: blur(1px); opacity: .6; }
 </style>
