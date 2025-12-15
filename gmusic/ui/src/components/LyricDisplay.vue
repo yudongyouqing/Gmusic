@@ -1,18 +1,17 @@
 <template>
   <div class="lyric-display">
     <div ref="scrollRef" class="ld-scroll" :class="{ 'is-locked': isPlaying }">
-      <!-- 虚拟滚动：仅渲染可视区域附近的歌词行 -->
-      <div class="scroll-spacer" :style="{ height: `${topPadding}px` }"></div>
       <div
-        v-for="line in visibleLines"
-        :key="line.idx"
-        :ref="el => { if (el) lineRefs[line.idx] = el }"
+        v-for="(line, idx) in lines"
+        :key="idx"
+        :ref="el => { if (el) lineRefs[idx] = el }"
         class="lyric-line"
-        :class="{ current: line.idx === currentLineIndex, blur: blurOthers && line.idx !== currentLineIndex }"
+        :style="lineStyle"
+        :class="{ current: idx === currentLineIndex, blur: blurOthers && idx !== currentLineIndex }"
       >
-        {{ line.text || '\u00A0' }}
+        <span>{{ line.text || '\u00A0' }}</span>
+        <span v-if="showTranslation" class="translation">(翻译占位)</span>
       </div>
-      <div class="scroll-spacer" :style="{ height: `${bottomPadding}px` }"></div>
     </div>
   </div>
 </template>
@@ -24,70 +23,44 @@ const props = defineProps({
   lyrics: { type: Object, default: null },
   currentTime: { type: Number, default: 0 },
   baseFontSize: { type: Number, default: 16 },
+  fontWeight: { type: Number, default: 400 },
   blurOthers: { type: Boolean, default: false },
-  isPlaying: { type: Boolean, default: false }
+  isPlaying: { type: Boolean, default: false },
+  showTranslation: { type: Boolean, default: false },
+  translationScale: { type: Number, default: 80 },
 })
 
-const allLines = computed(() => props.lyrics?.lines || [])
+const lines = computed(() => props.lyrics?.lines || [])
 
 const currentLineIndex = computed(() => {
   const ctMs = Math.floor((props.currentTime || 0) * 1000)
   let raw = -1
-  for (let i = 0; i < allLines.value.length; i++) {
-    if ((allLines.value[i]?.time || 0) <= ctMs) raw = i
+  const arr = lines.value
+  for (let i = 0; i < arr.length; i++) {
+    if ((arr[i]?.time || 0) <= ctMs) raw = i
     else break
   }
   if (raw < 0) return 0
   let j = raw
-  while (j > 0 && !((allLines.value[j]?.text || '').trim())) j--
+  while (j > 0 && !((arr[j]?.text || '').trim())) j--
   return j
 })
 
 const scrollRef = ref(null)
 const lineRefs = ref([])
 
-// --- 虚拟滚动核心 ---
-const visibleRange = ref({ start: 0, end: 20 })
-const topPadding = ref(0)
-const bottomPadding = ref(0)
-const averageLineHeight = ref(38) // 预估行高
-
-const visibleLines = computed(() => {
-  return allLines.value.slice(visibleRange.value.start, visibleRange.value.end).map((line, i) => ({
-    ...line,
-    idx: visibleRange.value.start + i
-  }))
-})
-
-function updateVisibleRange() {
-  const el = scrollRef.value
-  if (!el) return
-
-  const buffer = 10 // 上下多渲染10行
-  const scrollTop = el.scrollTop
-  const clientHeight = el.clientHeight
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / averageLineHeight.value) - buffer)
-  const endIndex = Math.min(allLines.value.length, Math.ceil((scrollTop + clientHeight) / averageLineHeight.value) + buffer)
-
-  visibleRange.value = { start: startIndex, end: endIndex }
-  topPadding.value = startIndex * averageLineHeight.value
-  bottomPadding.value = (allLines.value.length - endIndex) * averageLineHeight.value
-}
-
-function onScroll() {
-  if (!props.isPlaying) {
-    updateVisibleRange()
-  }
-}
-// --- 虚拟滚动结束 ---
+const lineStyle = computed(() => ({
+  '--lyric-base-size': `${props.baseFontSize}px`,
+  '--lyric-font-weight': props.fontWeight,
+  '--lyric-translation-scale': `${props.translationScale / 100}`
+}))
 
 function scrollToCurrent(animate = true) {
   const el = scrollRef.value
-  if (!el) return
+  const row = lineRefs.value[currentLineIndex.value]
+  if (!el || !row) return
 
-  const targetIndex = currentLineIndex.value
-  const targetScrollTop = targetIndex * averageLineHeight.value - (el.clientHeight / 2 - averageLineHeight.value / 2)
+  const targetScrollTop = row.offsetTop - (el.clientHeight / 2 - row.offsetHeight / 2)
 
   if (Math.abs(targetScrollTop - el.scrollTop) < 1) return
 
@@ -96,32 +69,26 @@ function scrollToCurrent(animate = true) {
   } else {
     el.scrollTop = targetScrollTop
   }
-  // 滚动后立即更新可视范围
-  nextTick(updateVisibleRange)
 }
 
 watch(currentLineIndex, () => {
   if (props.isPlaying) {
-    scrollToCurrent(true)
+    nextTick(() => scrollToCurrent(true))
   }
 })
 
 watch(() => props.isPlaying, (playing) => {
   if (playing) {
-    scrollToCurrent(false)
+    nextTick(() => scrollToCurrent(false))
   }
 })
 
 function initialAlign() {
-  nextTick(() => {
-    updateVisibleRange()
-    scrollToCurrent(false)
-  })
+  nextTick(() => scrollToCurrent(false))
 }
 
 let ro = null
 onMounted(() => {
-  scrollRef.value?.addEventListener('scroll', onScroll)
   initialAlign()
   if (window.ResizeObserver) {
     ro = new ResizeObserver(initialAlign)
@@ -132,11 +99,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  scrollRef.value?.removeEventListener('scroll', onScroll)
   if (ro) { try { ro.disconnect() } catch {} ro = null }
   window.removeEventListener('resize', initialAlign)
 })
-
 </script>
 
 <style scoped>
@@ -145,10 +110,10 @@ onBeforeUnmount(() => {
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  padding: 0 8px;
   scroll-behavior: smooth;
 }
 
-/* 播放时锁定滚动，用户无法手动操作 */
 .ld-scroll.is-locked {
   pointer-events: none;
 }
@@ -156,11 +121,29 @@ onBeforeUnmount(() => {
 .lyric-line {
   padding: 10px;
   text-align: center;
-  color:#666;
+  color: #fff; /* 改为纯白 */
   font-size: var(--lyric-base-size, 16px);
-  line-height:1.6;
-  transition: color .25s ease, font-size .25s ease, filter .25s ease, opacity .25s ease;
+  font-weight: var(--lyric-font-weight, 400);
+  line-height: 1.6;
+  transition: color .25s ease, font-size .25s ease, font-weight .25s ease, filter .25s ease, opacity .25s ease;
 }
-.lyric-line.current { color:#222; font-weight:600; font-size: calc(var(--lyric-base-size, 16px) + 2px); }
-.lyric-line.blur { filter: blur(1px); opacity: .6; }
+
+.lyric-line.current {
+  color: #fff; /* 当前行也为纯白，但更亮 */
+  font-weight: bold; /* 当前行始终加粗 */
+  font-size: calc(var(--lyric-base-size, 16px) + 2px);
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); /* 轻微发光效果 */
+}
+
+.lyric-line.blur {
+  filter: blur(1px);
+  opacity: .5;
+}
+
+.translation {
+  display: block;
+  margin-top: 4px;
+  font-size: calc(var(--lyric-base-size, 16px) * var(--lyric-translation-scale, 0.8));
+  opacity: 0.8;
+}
 </style>
