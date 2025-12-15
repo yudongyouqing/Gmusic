@@ -175,7 +175,12 @@ function formatTime(seconds){
 
 .right { display:flex; flex-direction:column; min-width:0; }
 /* 修复：移除 overflow:hidden，允许子元素滚动 */
-.lyric-wrap { flex:1; min-height:0; background: rgba(255,255,255,0.55); border:1px solid rgba(0,0,0,0.06); border-radius: 12px; backdrop-filter: blur(10px) saturate(160%); -webkit-backdrop-filter: blur(10px) saturate(160%); }
+.right { display:flex; flex-direction:column; min-width:0; justify-content: center; /* 垂直居中歌词窗口 */ }
+.lyric-wrap { flex: 0 1 400px; /* 固定高度，可调整 */ min-height: 200px; background: rgba(255,255,255,0.55); border:1px solid rgba(0,0,0,0.06); border-radius: 12px; backdrop-filter: blur(10px) saturate(160%); -webkit-backdrop-filter: blur(10px) saturate(160%);
+  /* 关键：上下淡出的蒙版效果 */
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
 .no-lyrics { height:100%; display:flex; align-items:center; justify-content:center; color:#666; }
 
 .controls-wrapper { margin-top: 16px; }
