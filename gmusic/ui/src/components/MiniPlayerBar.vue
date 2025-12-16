@@ -125,8 +125,8 @@ function onTouchMove(e) {
 .meta { flex: 0 1 320px; min-width: 160px; display:flex; flex-direction:column; justify-content:center; }
 .meta-title { font-size: 14px; font-weight: 600; color:#222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta-artist { font-size: 12px; color:#666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.ticker { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; position: relative; height: 1.5em; display: flex; align-items: center; justify-content: center; }
-.ticker__inner { width: 100%; text-align: center; color:#222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.ticker { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; position: relative; height: 1.5em; display: flex; align-items: center; justify-content: center; margin-left: var(--mini-ticker-offset, 0px); transition: margin-left .2s ease; }
+.ticker__inner { width: 100%; text-align: center; color:#222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--ticker-font-size, 14px); }
 .controls-wrap { display: none; align-items: center; gap: 8px; }
 .mini-bar:hover .controls-wrap { display: flex; flex: 1 1 auto; justify-content: center; }
 .mini-bar:hover .ticker { display: none; }
