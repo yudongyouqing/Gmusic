@@ -4,11 +4,12 @@ const KEY = 'gmusic:lyric-ui'
 
 export const useLyricUiStore = defineStore('lyricUi', {
   state: () => ({
-    fontSize: 20,       // px，基础字号 (已调大)
-    fontWeight: 400,    // 100-900，字体粗细
-    blurOthers: false,  // 是否模糊非当前行
-    showTranslation: false, // 是否显示翻译
-    translationScale: 80, // %，翻译字体缩放
+    fontSize: 20,
+    fontWeight: 400,
+    blurOthers: false,
+    showTranslation: false,
+    translationScale: 80,
+    backgroundBlur: 22, // 新增：播放页背景模糊
   }),
   actions: {
     load(){
@@ -22,6 +23,7 @@ export const useLyricUiStore = defineStore('lyricUi', {
           if(typeof data.blurOthers==='boolean') this.blurOthers = data.blurOthers
           if(typeof data.showTranslation==='boolean') this.showTranslation = data.showTranslation
           if(typeof data.translationScale==='number') this.translationScale = data.translationScale
+          if(typeof data.backgroundBlur==='number') this.backgroundBlur = data.backgroundBlur
         }
       }catch{}
     },
@@ -32,7 +34,8 @@ export const useLyricUiStore = defineStore('lyricUi', {
           fontWeight: this.fontWeight,
           blurOthers: this.blurOthers,
           showTranslation: this.showTranslation,
-          translationScale: this.translationScale
+          translationScale: this.translationScale,
+          backgroundBlur: this.backgroundBlur
         }
         localStorage.setItem(KEY, JSON.stringify(dataToSave))
       }catch{}

@@ -13,12 +13,7 @@
       <input type="range" min="0.20" max="0.90" step="0.01" v-model.number="local.alpha" @input="apply" />
     </div>
 
-    <div class="row">
-      <label>模糊 {{ local.blur }}px</label>
-      <input type="range" min="6" max="40" step="1" v-model.number="local.blur" @input="apply" />
-    </div>
-
-    <div class="row">
+<div class="row">
       <label>饱和度 {{ local.saturate }}%</label>
       <input type="range" min="100" max="220" step="5" v-model.number="local.saturate" @input="apply" />
     </div>

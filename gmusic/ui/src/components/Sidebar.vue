@@ -85,7 +85,7 @@
         </span>
         <span class="text">音质库</span>
       </a>
-      <a class="nav-item disabled" title="占位">
+      <RouterLink to="/settings" class="nav-item" active-class="active">
         <span class="icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18">
             <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -93,7 +93,7 @@
           </svg>
         </span>
         <span class="text">设置</span>
-      </a>
+      </RouterLink>
       <div class="divider"></div>
       <a class="nav-item disabled" title="占位">
         <span class="icon" aria-hidden="true">

@@ -62,6 +62,7 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../stores/player'
 import { useLyricUiStore } from '../stores/lyric'
+import { useSettingsStore } from '../stores/settings'
 import { getLyrics } from '../api/music'
 import LyricDisplay from '../components/LyricDisplay.vue'
 import LyricControls from '../components/LyricControls.vue'
@@ -69,7 +70,9 @@ import LyricControls from '../components/LyricControls.vue'
 const router = useRouter()
 const store = usePlayerStore()
 const lyricUi = useLyricUiStore()
+const settings = useSettingsStore()
 lyricUi.load()
+settings.load()
 
 const showLyricCtrl = ref(false)
 
@@ -83,7 +86,10 @@ const coverSrc = computed(() => {
 })
 function onCoverErr(){ hadCoverErr.value = true }
 
-const bgStyle = computed(() => ({ backgroundImage: coverSrc.value ? `url(${coverSrc.value})` : 'none' }))
+const bgStyle = computed(() => ({
+  backgroundImage: settings.nowPlayingBackgroundUrl ? `url(${settings.nowPlayingBackgroundUrl})` : (coverSrc.value ? `url(${coverSrc.value})` : 'none'),
+  '--np-bg-blur': `${lyricUi.backgroundBlur || 22}px`
+}))
 const hasLyrics = computed(() => store.lyrics && Array.isArray(store.lyrics.lines) && store.lyrics.lines.length > 0)
 
 async function ensureLyrics(){
@@ -123,7 +129,7 @@ function onLyricSeek(time) {
 
 <style scoped>
 .np-page { position: fixed; inset: 0; z-index: 2000; width:100%; height:100%; overflow:hidden; }
-.bg { position:absolute; inset:0; background-position:center; background-size:cover; filter: blur(22px) saturate(160%); transform: scale(1.06); opacity:.95; z-index:0; pointer-events:none; }
+.bg { position:absolute; inset:0; background-color: #000; background-position:center; background-size:cover; filter: blur(var(--np-bg-blur, 22px)) saturate(160%); transform: scale(1.06); opacity:1; z-index:0; pointer-events:none; }
 
 .header { position: absolute; left: 16px; right: 16px; top: 12px; z-index: 20001; display:flex; align-items:center; gap: 12px; }
 .back-btn, .gear-btn { width: 40px; height: 40px; border-radius: 10px; border:1px solid rgba(0,0,0,0.06); background: rgba(255,255,255,0.96); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.18); }

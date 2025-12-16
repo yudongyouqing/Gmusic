@@ -4,24 +4,20 @@ export const useUiStore = defineStore('ui', {
   state: () => ({
     theme: 'current', // 'current' | 'glass'
     alpha: 0.45,      // 透明度 0-1
-    blur: 18,         // 模糊 px
     saturate: 160,    // 饱和 %
     lyricFontSize: 14, // 歌词字号 px
     lyricAnchor: 0.35, // 歌词锚点（0~1，越小越靠上）
     tickerOffsetX: 0,  // 底栏歌词水平偏移(px，负为左移，正为右移)
-    overlayRect: null,
-    overlayCover: ''
   }),
   actions: {
     applyTheme() {
       const presets = {
-        current: { alpha: this.alpha, blur: this.blur, saturate: this.saturate },
-        glass:   { alpha: Math.min(0.36, this.alpha), blur: Math.max(22, this.blur), saturate: Math.max(180, this.saturate) },
+        current: { alpha: this.alpha, saturate: this.saturate },
+        glass:   { alpha: Math.min(0.36, this.alpha), saturate: Math.max(180, this.saturate) },
       }
       const p = presets[this.theme] || presets.current
       const surface = `rgba(255,255,255,${p.alpha})`
       const surfaceStrong = `rgba(255,255,255,${Math.min(0.9, p.alpha + 0.15)})`
-      const blur = `${p.blur}px`
       const sat = `${p.saturate}%`
       const lfs = `${this.lyricFontSize}px`
       const toX = `${this.tickerOffsetX}px`
@@ -30,7 +26,7 @@ export const useUiStore = defineStore('ui', {
       const root = document.documentElement
       root.style.setProperty('--mica-surface', surface)
       root.style.setProperty('--mica-surface-strong', surfaceStrong)
-      root.style.setProperty('--mica-blur', blur)
+      // --mica-blur is now controlled by NowPlaying.vue
       root.style.setProperty('--mica-saturate', sat)
       root.style.setProperty('--lyric-font-size', lfs)
       root.style.setProperty('--mini-ticker-offset', toX)
@@ -41,7 +37,6 @@ export const useUiStore = defineStore('ui', {
       const data = {
         theme: this.theme,
         alpha: this.alpha,
-        blur: this.blur,
         saturate: this.saturate,
         lyricFontSize: this.lyricFontSize,
         lyricAnchor: this.lyricAnchor,
@@ -57,7 +52,6 @@ export const useUiStore = defineStore('ui', {
           if (data && typeof data === 'object') {
             this.theme = data.theme ?? this.theme
             this.alpha = typeof data.alpha === 'number' ? data.alpha : this.alpha
-            this.blur = typeof data.blur === 'number' ? data.blur : this.blur
             this.saturate = typeof data.saturate === 'number' ? data.saturate : this.saturate
             this.lyricFontSize = typeof data.lyricFontSize === 'number' ? data.lyricFontSize : this.lyricFontSize
             this.lyricAnchor = typeof data.lyricAnchor === 'number' ? data.lyricAnchor : this.lyricAnchor

@@ -6,6 +6,11 @@
     </div>
 
     <div class="row">
+      <label>背景模糊 {{ local.backgroundBlur }}px</label>
+      <input type="range" min="0" max="50" step="1" v-model.number="local.backgroundBlur" @input="apply" />
+    </div>
+
+    <div class="row">
       <label>字体大小 {{ local.fontSize }}px</label>
       <input type="range" min="12" max="32" step="1" v-model.number="local.fontSize" @input="apply" />
     </div>
@@ -61,7 +66,8 @@ const local = reactive({
   fontWeight: store.fontWeight,
   blurOthers: store.blurOthers,
   showTranslation: store.showTranslation,
-  translationScale: store.translationScale
+  translationScale: store.translationScale,
+  backgroundBlur: store.backgroundBlur
 })
 
 function apply(){
@@ -70,6 +76,7 @@ function apply(){
   store.blurOthers = local.blurOthers
   store.showTranslation = local.showTranslation
   store.translationScale = local.translationScale
+  store.backgroundBlur = local.backgroundBlur
 }
 
 function save(){ 
@@ -84,6 +91,7 @@ function reset(){
   local.blurOthers = false
   local.showTranslation = false
   local.translationScale = 80
+  local.backgroundBlur = 22
   apply()
 }
 
