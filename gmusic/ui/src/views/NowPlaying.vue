@@ -31,10 +31,10 @@
             <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
               <path d="M9 3v10.5a3.5 3.5 0 1 0 2 3.15V7h6V3H9z" fill="currentColor"/>
             </svg>
-          </div>
         </div>
-        <div v-if="coverSrc" class="cover-reflect"><img :src="coverSrc" alt="reflect" /></div>
       </div>
+        <div v-if="coverSrc" class="cover-reflect"><img :src="coverSrc" alt="reflect" /></div>
+        </div>
 
       <div class="right">
         <div class="lyric-wrap">
