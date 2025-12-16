@@ -38,7 +38,7 @@
 
       <div class="right">
         <div class="lyric-wrap">
-          <LyricDisplay
+                    <LyricDisplay
             v-if="hasLyrics"
             :lyrics="store.lyrics"
             :currentTime="store.playerStatus.position"
@@ -48,6 +48,7 @@
             :isPlaying="store.isPlaying"
             :showTranslation="lyricUi.showTranslation === true"
             :translationScale="lyricUi.translationScale || 80"
+            @seek="onLyricSeek"
           />
           <div v-else class="no-lyrics">暂无歌词</div>
         </div>
@@ -113,6 +114,10 @@ onMounted(async () => {
 onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('keydown', onEsc) })
 
 function onEsc(e){ if(e.key === 'Escape') router.back() }
+
+function onLyricSeek(time) {
+  store.seekTo(time)
+}
 
 </script>
 

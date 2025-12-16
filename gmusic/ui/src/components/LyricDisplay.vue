@@ -1,6 +1,6 @@
 <template>
   <div class="lyric-display">
-    <div ref="scrollRef" class="ld-scroll" :class="{ 'is-locked': isPlaying }">
+    <div ref="scrollRef" class="ld-scroll">
       <div
         v-for="(line, idx) in lines"
         :key="idx"
@@ -8,6 +8,7 @@
         class="lyric-line"
         :style="lineStyle"
         :class="{ current: idx === currentLineIndex, blur: blurOthers && idx !== currentLineIndex }"
+        @click="onLineClick(line)"
       >
         <span>{{ line.text || '\u00A0' }}</span>
         <span v-if="showTranslation" class="translation">(翻译占位)</span>
@@ -29,6 +30,8 @@ const props = defineProps({
   showTranslation: { type: Boolean, default: false },
   translationScale: { type: Number, default: 80 },
 })
+
+const emit = defineEmits(['seek'])
 
 const lines = computed(() => props.lyrics?.lines || [])
 
@@ -102,6 +105,12 @@ onBeforeUnmount(() => {
   if (ro) { try { ro.disconnect() } catch {} ro = null }
   window.removeEventListener('resize', initialAlign)
 })
+
+function onLineClick(line) {
+  if (line && typeof line.time === 'number') {
+    emit('seek', line.time / 1000)
+  }
+}
 </script>
 
 <style scoped>
@@ -112,27 +121,35 @@ onBeforeUnmount(() => {
   -webkit-overflow-scrolling: touch;
   padding: 0 8px;
   scroll-behavior: smooth;
+  /* Hide scrollbar */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
-
-.ld-scroll.is-locked {
-  pointer-events: none;
+.ld-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .lyric-line {
   padding: 10px;
   text-align: center;
-  color: #fff; /* 改为纯白 */
+  color: #fff;
   font-size: var(--lyric-base-size, 16px);
   font-weight: var(--lyric-font-weight, 400);
   line-height: 1.6;
   transition: color .25s ease, font-size .25s ease, font-weight .25s ease, filter .25s ease, opacity .25s ease;
+  cursor: pointer;
+}
+
+.lyric-line:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
 }
 
 .lyric-line.current {
-  color: #fff; /* 当前行也为纯白，但更亮 */
-  font-weight: bold; /* 当前行始终加粗 */
+  color: #fff;
+  font-weight: bold;
   font-size: calc(var(--lyric-base-size, 16px) + 2px);
-  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); /* 轻微发光效果 */
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 
 .lyric-line.blur {
