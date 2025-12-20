@@ -148,7 +148,7 @@ function onLineClick(line) {
 .lyric-line.current {
   color: #fff;
   font-weight: bold;
-  font-size: calc(var(--lyric-base-size, 16px) + 2px);
+  font-size: calc(var(--lyric-base-size) + 2px);
   text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 

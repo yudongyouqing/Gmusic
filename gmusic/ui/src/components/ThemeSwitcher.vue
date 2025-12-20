@@ -25,7 +25,7 @@
 
     <div class="row">
       <label>底栏歌词字号 {{ local.tickerFontSize }}px</label>
-      <input type="range" min="12" max="18" step="1" v-model.number="local.tickerFontSize" @input="apply" />
+      <input type="range" min="12" max="24" step="1" v-model.number="local.tickerFontSize" @input="apply" />
     </div>
 
     <div class="row">
