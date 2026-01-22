@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -20,6 +22,9 @@ import (
 var (
 	audioPlayer *player.Player
 	upgrader    = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	// 扫描任务管理：key 是任务 ID（可以用目录路径或 UUID），value 是 scanner 实例
+	activeScanners = make(map[string]*scanner.Scanner)
+	scannerMu      sync.Mutex
 )
 
 // SetupRouter 设置路由
@@ -52,7 +57,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	// 播放控制 API
 	router.POST("/api/player/play", playHandler())
 	router.POST("/api/player/pause", pauseHandler())
-	router.POST("/api/player/resume", resumeHandler())
+	router.POST("/api/player/resume", resumeHandler())                                                                                                  
 	router.POST("/api/player/stop", stopHandler())
 	router.POST("/api/player/volume", setVolumeHandler())
 	router.POST("/api/player/seek", seekHandler())
@@ -68,6 +73,9 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	// 歌词/封面/扫描
 	router.GET("/api/lyrics/:songID", getLyrics(db))
 	router.POST("/api/scan", scanDirectory(db))
+	router.POST("/api/scan/cancel", cancelScan())
+	router.POST("/api/scan/pause", pauseScan())
+	router.POST("/api/scan/resume", resumeScan())
 	router.GET("/api/cover/:songID", getCover(db))
 
 	// WebSocket 实时播放状态
@@ -343,16 +351,118 @@ func scanDirectory(db *gorm.DB) gin.HandlerFunc {
 		if req.Workers == 0 {
 			req.Workers = 4
 		}
-		s := scanner.NewScanner(db)
+
+		// 使用请求的 context（支持 HTTP 请求取消）
+		ctx := c.Request.Context()
+		s := scanner.NewScannerWithContext(ctx, db)
+
+		// 注册到活跃扫描器（使用目录路径作为 key）
+		scannerMu.Lock()
+		activeScanners[req.DirPath] = s
+		scannerMu.Unlock()
+
+		// 异步执行扫描
 		go func() {
-			result, err := s.ScanDirectoryWithWorkers(req.DirPath, req.Workers)
+			defer func() {
+				// 扫描完成后移除
+				scannerMu.Lock()
+				delete(activeScanners, req.DirPath)
+				scannerMu.Unlock()
+			}()
+
+			result, err := s.ScanDirectoryWithWorkers(ctx, req.DirPath, req.Workers)
 			if err != nil {
-				fmt.Printf("扫描错误: %v\n", err)
+				if err == context.Canceled {
+					fmt.Printf("扫描已取消: %s\n", req.DirPath)
+				} else {
+					fmt.Printf("扫描错误: %v\n", err)
+				}
 				return
 			}
 			fmt.Printf("扫描完成: 总文件数=%d, 添加=%d, 失败=%d\n", result.TotalFiles, result.AddedSongs, result.FailedFiles)
 		}()
-		c.JSON(http.StatusAccepted, gin.H{"message": "扫描已启动", "dir_path": req.DirPath})
+
+		c.JSON(http.StatusAccepted, gin.H{
+			"message":  "扫描已启动",
+			"dir_path": req.DirPath,
+		})
+	}
+}
+
+// cancelScan 取消扫描
+func cancelScan() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			DirPath string `json:"dir_path" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		scannerMu.Lock()
+		s, exists := activeScanners[req.DirPath]
+		scannerMu.Unlock()
+
+		if !exists {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到活跃的扫描任务"})
+			return
+		}
+
+		s.Cancel()
+		delete(activeScanners, req.DirPath)
+
+		c.JSON(http.StatusOK, gin.H{"message": "扫描已取消", "dir_path": req.DirPath})
+	}
+}
+
+// pauseScan 暂停扫描
+func pauseScan() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			DirPath string `json:"dir_path" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		scannerMu.Lock()
+		s, exists := activeScanners[req.DirPath]
+		scannerMu.Unlock()
+
+		if !exists {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到活跃的扫描任务"})
+			return
+		}
+
+		s.Pause()
+		c.JSON(http.StatusOK, gin.H{"message": "扫描已暂停", "dir_path": req.DirPath})
+	}
+}
+
+// resumeScan 恢复扫描
+func resumeScan() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			DirPath string `json:"dir_path" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		scannerMu.Lock()
+		s, exists := activeScanners[req.DirPath]
+		scannerMu.Unlock()
+
+		if !exists {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到活跃的扫描任务"})
+			return
+		}
+
+		s.Resume()
+		c.JSON(http.StatusOK, gin.H{"message": "扫描已恢复", "dir_path": req.DirPath})
 	}
 }
 

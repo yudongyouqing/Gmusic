@@ -2,11 +2,13 @@ package metadata
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/dhowden/tag"
 	"github.com/hajimehoshi/go-mp3"
@@ -18,25 +20,62 @@ import (
 // AudioInfo 音频探测信息（用于接口返回）
 type AudioInfo struct {
 	Format        string `json:"format"`
-	Duration      int    `json:"duration"`       // 秒
+	Duration      int    `json:"duration"` // 秒
 	DurationText  string `json:"duration_text"`
-	SampleRate    int    `json:"sample_rate"`    // Hz
+	SampleRate    int    `json:"sample_rate"` // Hz
 	Channels      int    `json:"channels"`
 	BitsPerSample int    `json:"bits_per_sample"`
 	FilePath      string `json:"file_path"`
 }
 
-// ExtractMetadata 从音频文件提取元数据
+// ExtractMetadata 从音频文件提取元数据（兼容旧接口）
 func ExtractMetadata(filePath string) (*storage.Song, error) {
+	return ExtractMetadataWithContext(context.Background(), filePath)
+}
+
+// ExtractMetadataWithContext 从音频文件提取元数据（支持 context 取消和超时）
+func ExtractMetadataWithContext(ctx context.Context, filePath string) (*storage.Song, error) {
+	// 检查取消
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// 设置默认超时（如果 context 没有超时，给一个合理的默认值）
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// 打开文件（带 context 检查）
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("打开文件失败: %w", err)
 	}
 	defer file.Close()
 
-	md, err := tag.ReadFrom(file)
-	if err != nil {
-		return nil, fmt.Errorf("读取 metadata 失败: %w", err)
+	// 读取 metadata（可能耗时，需要检查 context）
+	mdChan := make(chan struct {
+		md  tag.Metadata
+		err error
+	}, 1)
+
+	go func() {
+		md, err := tag.ReadFrom(file)
+		mdChan <- struct {
+			md  tag.Metadata
+			err error
+		}{md, err}
+	}()
+
+	var md tag.Metadata
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case result := <-mdChan:
+		if result.err != nil {
+			return nil, fmt.Errorf("读取 metadata 失败: %w", result.err)
+		}
+		md = result.md
 	}
 
 	track, _ := md.Track()
@@ -52,32 +91,61 @@ func ExtractMetadata(filePath string) (*storage.Song, error) {
 		Format:   getFormat(filePath),
 	}
 
+	// 再次检查取消
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	if pic := md.Picture(); pic != nil {
 		song.CoverURL = saveCover(pic.Data, filePath)
 	}
 
-	if d := ComputeDurationSeconds(filePath); d > 0 {
+	// 计算时长（可能耗时）
+	if d := ComputeDurationSecondsWithContext(ctx, filePath); d > 0 {
 		song.Duration = d
 	}
 
 	return song, nil
 }
 
-// ComputeDurationSeconds 计算音频时长（秒），支持 mp3/flac，其他返回 0
+// ComputeDurationSeconds 计算音频时长（秒），支持 mp3/flac，其他返回 0（兼容旧接口）
 func ComputeDurationSeconds(filePath string) int {
-	info, err := ProbeAudio(filePath)
+	return ComputeDurationSecondsWithContext(context.Background(), filePath)
+}
+
+// ComputeDurationSecondsWithContext 计算音频时长（支持 context）
+func ComputeDurationSecondsWithContext(ctx context.Context, filePath string) int {
+	select {
+	case <-ctx.Done():
+		return 0
+	default:
+	}
+
+	info, err := ProbeAudioWithContext(ctx, filePath)
 	if err != nil {
 		return 0
 	}
 	return info.Duration
 }
 
-// ProbeAudio 探测音频基础信息（时长/采样率/声道/位深）
+// ProbeAudio 探测音频基础信息（兼容旧接口）
 func ProbeAudio(filePath string) (*AudioInfo, error) {
+	return ProbeAudioWithContext(context.Background(), filePath)
+}
+
+// ProbeAudioWithContext 探测音频基础信息（支持 context）
+func ProbeAudioWithContext(ctx context.Context, filePath string) (*AudioInfo, error) {
 	ai := &AudioInfo{FilePath: filePath, Format: getFormat(filePath)}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".mp3":
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		f, err := os.Open(filePath)
 		if err != nil {
 			return nil, err
@@ -99,6 +167,11 @@ func ProbeAudio(filePath string) (*AudioInfo, error) {
 		ai.DurationText = FormatDuration(ai.Duration)
 		return ai, nil
 	case ".flac":
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		f, err := os.Open(filePath)
 		if err != nil {
 			return nil, err
