@@ -303,16 +303,27 @@ func (s *Scanner) ScanDirectoryWithWorkers(ctx context.Context, dirPath string, 
 
 	// 启动工作 goroutines
 	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Add(1) // 在 goroutine 启动前调用 Add，确保计数正确
+		go func(workerID int) {
+			// 使用 defer + recover 确保 Done 一定会被调用，即使 panic
+			defer func() {
+				if r := recover(); r != nil {
+					// 记录 panic 信息，但不影响 WaitGroup 的 Done 调用
+					s.mu.Lock()
+					s.result.Errors = append(s.result.Errors,
+						fmt.Sprintf("Worker %d panic: %v", workerID, r))
+					s.mu.Unlock()
+				}
+				wg.Done() // 确保 Done 被调用，无论是否 panic
+			}()
+
 			for {
 				select {
 				case <-ctx.Done():
-					return
+					return // 退出路径 1: context 取消
 				case filePath, ok := <-fileChan:
 					if !ok {
-						return
+						return // 退出路径 2: channel 关闭
 					}
 
 					// 检查并处理暂停（持续监听直到恢复或取消）
@@ -353,7 +364,7 @@ func (s *Scanner) ScanDirectoryWithWorkers(ctx context.Context, dirPath string, 
 					s.processAudioFileWithContext(ctx, filePath)
 				}
 			}
-		}()
+		}(i) // 传递 worker ID 用于错误日志
 	}
 
 	// 分配文件到工作队列（支持取消）
