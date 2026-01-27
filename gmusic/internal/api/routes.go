@@ -31,6 +31,7 @@ var (
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	router := gin.Default()
 
+	// 全局中间件
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
@@ -47,36 +48,53 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		fmt.Printf("播放器初始化失败: %v\n", err)
 	}
 
-	// 歌曲相关 API
-	router.GET("/api/songs", getSongs(db))
-	router.GET("/api/songs/search", searchSongs(db))
-	router.GET("/api/songs/:id", getSongByID(db))
-	router.POST("/api/songs", addSong(db))
-	router.PUT("/api/songs/:id", updateSong(db)) // 新增：更新歌曲信息
+	// API V1 路由组
+	apiV1 := router.Group("/api")
+	{
+		// 歌曲相关 API
+		songs := apiV1.Group("/songs")
+		{
+			songs.GET("", getSongs(db))
+			songs.GET("/search", searchSongs(db))
+			songs.GET("/:id", getSongByID(db))
+			songs.POST("", addSong(db))
+			songs.PUT("/:id", updateSong(db))
+		}
 
-	// 播放控制 API
-	router.POST("/api/player/play", playHandler())
-	router.POST("/api/player/pause", pauseHandler())
-	router.POST("/api/player/resume", resumeHandler())                                                                                                  
-	router.POST("/api/player/stop", stopHandler())
-	router.POST("/api/player/volume", setVolumeHandler())
-	router.POST("/api/player/seek", seekHandler())
-	router.GET("/api/player/status", getPlayerStatus())
+		// 播放控制 API
+		playerGroup := apiV1.Group("/player")
+		{
+			playerGroup.POST("/play", playHandler())
+			playerGroup.POST("/pause", pauseHandler())
+			playerGroup.POST("/resume", resumeHandler())
+			playerGroup.POST("/stop", stopHandler())
+			playerGroup.POST("/volume", setVolumeHandler())
+			playerGroup.POST("/seek", seekHandler())
+			playerGroup.GET("/status", getPlayerStatus())
+		}
 
-	// 工具 API：补全时长
-	router.POST("/api/refresh/durations", refreshDurations(db))
+		// 音频信息（时长等）API
+		audio := apiV1.Group("/audio")
+		{
+			audio.GET("/:songID/info", audioInfoByID(db))
+			audio.POST("/probe", audioProbeByPath())
+		}
 
-	// 音频信息（时长等）API
-	router.GET("/api/audio/:songID/info", audioInfoByID(db))
-	router.POST("/api/audio/probe", audioProbeByPath())
+		// 歌词/封面/扫描
+		apiV1.GET("/lyrics/:songID", getLyrics(db))
+		apiV1.GET("/cover/:songID", getCover(db))
 
-	// 歌词/封面/扫描
-	router.GET("/api/lyrics/:songID", getLyrics(db))
-	router.POST("/api/scan", scanDirectory(db))
-	router.POST("/api/scan/cancel", cancelScan())
-	router.POST("/api/scan/pause", pauseScan())
-	router.POST("/api/scan/resume", resumeScan())
-	router.GET("/api/cover/:songID", getCover(db))
+		scan := apiV1.Group("/scan")
+		{
+			scan.POST("", scanDirectory(db))
+			scan.POST("/cancel", cancelScan())
+			scan.POST("/pause", pauseScan())
+			scan.POST("/resume", resumeScan())
+		}
+
+		// 工具 API：补全时长
+		apiV1.POST("/refresh/durations", refreshDurations(db))
+	}
 
 	// WebSocket 实时播放状态
 	router.GET("/ws/player", playerWebSocket())

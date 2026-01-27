@@ -114,4 +114,3 @@ func getLyricByID(id int) (string, error) {
 
 	return "", fmt.Errorf("未找到歌词")
 }
-
